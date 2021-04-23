@@ -1,0 +1,152 @@
+library(vegan)
+library(ggplot2)
+library(plyr)
+library(ape)
+library(dplyr)
+library(ggthemes)
+library(RColorBrewer)
+library(viridis)
+library(wesanderson)
+library(paletteer)
+##to create an ordination graph
+#read in distance matrix
+dis_mar <- read.delim('3-61-sample-amphi/unwei.txt', row.names = 1, sep = '\t', stringsAsFactors = F, check.names = F) %>% as.dist()
+#read in experiment design files
+group <- read.table('../metadata.tsv', sep = '\t',header = T,stringsAsFactors = T)
+pcs_dsae<- pcoa(dis)
+#compute pcoa
+pcs_marineamphi <- pcoa(dis_mar)
+#compute NMDS
+nmds <- metaMDS(dis)
+
+#within(sample_habitat_3, Habitat_1 <- factor(Habitat_1, levels = c("Supralittoral","Intertidal",'Bathypelagic','Hadopelagic')))
+
+
+##wrap up in a single function
+##input from function'pcoa'
+show_final_pcoa = function(metadata,pcoa_object, axis1, axis2)
+  {
+
+  given_pcoa = pcoa_object
+  given_metadata=metadata
+
+
+   # Store axes names
+  kept_axes = paste0("Axis.", c(axis1, axis2))
+
+  # data.frame with values from species
+  pcoa_df = as.data.frame(given_pcoa$vectors)
+
+
+  # Eigen values per axes 
+  eigen_values = given_pcoa$values$Relative_eig[c(axis1, axis2)]
+  names(eigen_values) = kept_axes
+
+  # Axes labels in plot
+  axes_labs = lapply(kept_axes, function(x) {
+    paste0(gsub(".", " ", x, fixed = TRUE),
+           " (", round(eigen_values[x] * 100, 2), "%)")
+  })
+
+      #merge  metadata
+  pcoa_df$names <- rownames(pcoa_df)
+  names(given_metadata)[1] <- c('names')
+
+  pcoa_df <- merge(pcoa_df, group,by ='names', all.x = T)
+ pcoa_df <- within(pcoa_df, Habitat_0 <- factor(Habitat_0, levels = c('Supralittoral','Intertidal','Subtidal','Bathypelagic','Hadopelagic')))
+  pcoa_df <- within(pcoa_df, grouping <- factor(grouping, levels = c('Detritivore','Herbivore','Scavenger','Environment')))
+
+  #pcoa_df <- within(pcoa_df, grouping_2 <- factor(grouping_2, levels = c('Bathyal amphipod','Hadal amphipod','Environment')))
+
+  library(scales)
+  amin <- 0.3
+
+  #highcol <- hue_pal()(1)       # or a color name like "blue"
+  highcol <- "grey"
+  lowcol.hex <- as.hexmode(round(col2rgb(highcol) * amin + 255 * (1 - amin)))
+  lowcol <- paste0("#",   sep = "",
+                   paste(format(lowcol.hex, width = 2), collapse = ""))
+  # Final plot
+  given_pcoa_plot2 = ggplot(pcoa_df,aes_string(x = kept_axes[1],
+                            y = kept_axes[2])) +
+    # Add species points
+    #geom_point(aes(color=grouping_2),size =4 ) +
+########alpha and fill
+    #geom_point(aes(color=grouping,shape=Habitat_0),size =4,alpha=.8 ) +
+    geom_point(aes(color=depth,shape=sample_type),size =4,alpha=.8 ) +
+    #scale_fill_gradient(high = highcol, low = lowcol) +
+    #guides(fill = guide_colourbar(ticks = TRUE))+
+    #guides(alpha=F)+
+#########
+    #scale_color_paletteer_d('awtools::ppalette',direction = 1)+
+    scale_color_viridis(discrete = F, option = "D",direction = -1,breaks= c (0,1000,4000,6000,10000))+
+    #scale_fill_viridis(discrete = F, option = "B")+
+    #scale_color_brewer(palette = 'Paired', direction = 1)+
+    #scale_color_manual(values = wes_palette("Moonrise2"))+
+    #scale_color_manual(values = c('gold','plum3','cadetblue3', "#94c6da","#f3a583",'gray','#7CCCBC','#FF9933',"#85A9C5","#85C5A6",'#E2A385'))+
+    scale_shape_manual(values = c(19,17,15,25,18))+
+    #scale_alpha_continuous(name = "Depth",range = c(0.4,1))+
+
+     # Labels & legend
+    labs(x = paste('PCoA',axes_labs[[1]]),
+         y = paste('PCoA',axes_labs[[2]]))+
+    #labs(color='Diet',shape='Habitat')+
+    labs(color="Depth(m)", shape='Sample') +
+    #guides(shape = F,colour = guide_legend(override.aes = list(shape = c(19,19,17)))) +
+    #theme
+    theme_bw() +
+    theme(panel.grid = element_blank())+
+    theme(legend.position = 'right')+
+    theme(legend.title = element_text(size=12,face='bold'),
+          legend.text = element_text(size=12)
+          )+
+    theme(axis.title=element_text(size=12,face = "bold"))+
+    ggtitle('')+
+    # Add dashed axes
+    geom_hline(yintercept = 0, linetype = 2, color = 'gray') +
+    geom_vline(xintercept = 0, linetype = 2, color = 'gray')
+
+    # Specified limits to get square plot
+    # to see the effect of this you can replace this line by
+    # coord_equal() +
+    #coord_fixed(xlim = x_lim, ylim = y_lim)
+
+    #stat_ellipse(aes(color=host_species),level = 0.95, alpha = 0.8,linetype=2,size =1.0,geom = 'path', show.legend = FALSE)
+
+    #theme(legend.title = element_blank(),legend.key = element_blank(),legend.background = element_blank())
+
+
+}
+dsae=show_final_pcoa(group,pcs_dsae,1,2)+theme(axis.title = element_text(size=16))
+amphi=show_final_pcoa(group,pcs_whole,1,2)+theme(axis.title = element_text(size=16))+guides(colour = guide_legend(order = 1),
+                                                                                              shape = guide_legend(order = 2))
+
+coastal=show_final_pcoa(group,pcs_coastalamphi,1,2)+theme(axis.title = element_text(size=16))
+marine=show_final_pcoa(group,pcs_marineamphi,1,2)+theme(axis.title = element_text(size=16),legend.position = "top")
+deepsea=ds_amp+theme(axis.title = element_text(size=16),legend.position = "top")
+
+aqua_depth=show_final_pcoa(group,pcs,1,2)+theme(axis.title = element_text(size=16))
+
+
+diet61=diet61+labs(color='Diet')
+
+
+kk=marine+ theme(legend.title = element_text(size=12,face='bold'),
+                  legend.key.width = unit(1.3,  unit = "cm"),
+                  legend.spacing.x = unit(0.25, unit = "cm"),
+                  legend.text = element_text(size=12),
+                  legend.position = 'top',
+                  legend.direction = 'horizontal'
+                  )
+
+
+
+fig44 = cowplot::plot_grid(amphi,kk,coastal,deepsea,labels =c("(a)","(b)", "(c)","(d)" ),
+                           axis = "rt",align="h",ncol = 2,rel_widths = c(1.22,0.9))
+
+ggsave("dep.pdf", plot=dsae, width=150, height=100, units="mm", dpi=600)
+
+
+
+
+
