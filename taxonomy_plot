@@ -1,0 +1,285 @@
+library(RColorBrewer)
+library(reshape2)
+library(ggplot2)
+library(tidyr)
+library(ggpmisc)
+library(ggsignif)
+library(ggpubr)
+library(rstatix)
+library(vegan)
+
+group <- read.delim('../metadata-amphi.tsv', sep = '\t', stringsAsFactors = TRUE)
+p2<- read.csv('amphi-level-2.csv', row.names = 1, stringsAsFactors = TRUE, check.names = FALSE)
+p6<-read.csv('tax - 副本/p6-sp.csv', row.names = 1, stringsAsFactors = TRUE, check.names = FALSE)
+p8 <- read.csv('dom_genus/hpt_strep.csv', stringsAsFactors = TRUE, check.names = FALSE)
+
+
+#Function1 -- ranking
+taxa_top = function(given_taxa,maxphyla,sampleinfo){
+
+  taxa = given_taxa
+  group=sampleinfo
+
+  taxa <- decostand(taxa,'total')
+  taxa <- t(taxa)%>% as.data.frame()
+  taxa$sum <- rowSums(taxa)
+
+  taxa <- taxa[order(taxa$sum, decreasing = TRUE), ]
+  taxa_top <- taxa[1:maxphyla, -ncol(taxa)]
+  #taxa_top['Others', ] <- 1 - colSums(taxa_top)
+  taxa_top$taxa <- factor(rownames(taxa_top), levels = rev(rownames(taxa_top)))
+  taxa_top <- melt(taxa_top, id = 'taxa')
+  names(group)[1] <- 'variable'
+  taxa_top <- merge(taxa_top, group, by = 'variable')
+
+}
+
+#Function2 -- dominant phyla abundance boxplot
+#TOP4 boxplot with overall p-value
+
+phylum_boxplot = function(given_taxa,sampleinfo,maxphyla,mygroup)
+
+{  phylum=given_taxa
+  sampleinfo=sampleinfo
+  maxphyla=maxphyla
+  mygroup=mygroup
+
+  phylum <- decostand(phylum,'total')
+  phylum <- t(phylum)%>% as.data.frame()
+  phylum$sum <- rowSums(phylum)
+
+  phylum <- phylum[order(phylum$sum, decreasing = TRUE), ]
+  phylum_top <- phylum[1:maxphyla, -ncol(phylum)]
+  phylum_top$phylum <- factor(rownames(phylum_top), levels = rev(rownames(phylum_top)))
+  phylum_top <- melt(phylum_top, id = 'phylum')
+  names(group)[1] <- 'variable'
+  phylum_top <- merge(phylum_top, group, by = 'variable')
+
+  phylum_top <- within(phylum_top, Habitat_0 <- factor(Habitat_0, levels = c("Supralittoral","Intertidal",'Subtidal','Bathypelagic','Hadopelagic')))
+  #write.csv(class_top10, 'class10.csv', quote = FALSE)
+
+  #graph
+ ggplot(phylum_top, aes_string(x=mygroup, y=phylum_top$value*100))+
+    geom_boxplot()+
+    scale_fill_brewer(palette = 'Set3')+
+    facet_grid(phylum~. , scales="free")+
+    theme_bw()+
+    theme(axis.text.x=element_text(size=6,angle = 45,hjust=1),
+         axis.text = element_text(size = 5),
+         axis.title = element_text(size = 7),
+         strip.text = element_text(size=7),
+         strip.background = element_rect(fill='grey93',color = 'grey'),
+         panel.background = element_rect(fill = 'transparent'),
+         panel.border = element_rect(color = 'grey'),
+         legend.position = 'none')+
+    stat_compare_means(aes(label = paste0(stat(p.signif))),
+                       method = "kruskal.test",label.y.npc = 0.30,paired = T)+
+    labs(x = '', y = 'Relative Abundance(%)',face='bold')
+}
+
+ttt=phylum_boxplot(p2,group,5,Habitat_0)
+ttt
+
+####Function3 -- level2 barplot
+l2barplot <- function(given_taxa,sampleinfo) {
+
+  phylum=given_taxa
+  sampleinfo=group
+  phylum <- decostand(phylum,'total')%>%t()%>% as.data.frame()
+  phylum$sum <- rowSums(phylum)
+
+  phylum <- phylum[order(phylum$sum, decreasing = TRUE), ]
+  phylum_top10 <- phylum[1:10, -ncol(phylum)]
+  phylum_top10['Others', ] <- 1 - colSums(phylum_top10)
+  #write.csv(phylum_top10, 'phylum10.csv', quote = FALSE)
+
+  phylum_top10$phylum <- factor(rownames(phylum_top10), levels = rev(rownames(phylum_top10)))
+  phylum_top10 <- melt(phylum_top10, id = 'phylum')
+  names(group)[1] <- 'variable'
+  phylum_top10 <- merge(phylum_top10, group, by = 'variable')
+
+  ###########get some colours
+  colourCount = length(unique(phylum_top10$phylum))
+  getPalette = colorRampPalette(brewer.pal(12, "Paired"))
+
+
+  # facet_grid(Habitat_0~.,scales = 'free_y',space = 'free_y')+
+  ###########################################################################barplot
+  names(phylum_top10)[2] <- 'Phylum'
+  phylum_top10 <- within(phylum_top10, Habitat_0 <- factor(Habitat_0, levels = c("Supralittoral","Intertidal",'Subtidal','Bathypelagic','Hadopelagic')))
+
+
+  ggplot(phylum_top10, aes(nick, value*100, fill =Phylum) )+
+    geom_col(position = 'stack') +
+    labs(x = '', y = 'Relative Abundance(%)') +
+    theme(axis.title = element_text(size = 13)) +
+    theme(panel.grid = element_blank(),
+          panel.background = element_rect(fill = 'transparent'),
+          panel.border = element_blank()) +
+    guides(fill=guide_legend(ncol=1))+
+    scale_fill_brewer(palette = 'Spectral')+
+    facet_grid(~Habitat_0,scales = 'free_x',space = 'free_x')+
+    geom_bar(stat="identity", color="grey") +
+    theme(panel.grid = element_blank(),
+          #axis.text = element_text(size=6),
+          axis.text.x = element_text(angle=45, hjust=1,size=11),
+          #axis.title = element_text(size=14),
+          legend.key.size = unit(6, "mm"),
+                #legend.text = element_text(size=11),
+          #legend.title = element_text(size=12),
+          strip.background = element_rect(fill = 'grey95',color = 'grey'),
+          strip.text = element_text(size=12,face='bold'))
+
+}
+t2=l2barplot(p2,group)
+t2
+
+
+ggsave("phylafigs.png", plot=t2, width=350, height=150, units="mm", dpi=600)
+
+
+phylum_abund.plot = cowplot::plot_grid(bxp_phyla, lm,nrow = 2,align = 'hv',
+                                       rel_heights =c(1.75, 1.5), labels=c("A", "B"))
+ggsave("all_l2bar.tiff", plot=all_l2bar, device="tiff",width=400, height=210, units="mm", dpi=300)
+
+#boxplot
+###pairwise test之前要给factor排序
+##input sampleid as rowname phylum as colname
+phylum <- decostand(p2,'total')%>%t()%>% as.data.frame()
+phylum$sum <- rowSums(phylum)
+
+phylum <- phylum[order(phylum$sum, decreasing = TRUE), ]
+phylum_top5 <- phylum[1:5, -ncol(phylum)]
+#phylum_top5['<1% abund.', ] <- 1 - colSums(phylum_top10)
+#write.csv(phylum_top5, 'phylum10.csv', quote = FALSE)
+
+phylum_top5$phylum <- factor(rownames(phylum_top10), levels = rev(rownames(phylum_top10)))
+phylum_top5 <- melt(phylum_top5, id = 'phylum')
+names(group)[1] <- 'variable'
+phylum_top5 <- merge(phylum_top5, group, by = 'variable')
+
+phylum_top5 <- within(phylum_top5, Habitat_0 <- factor(Habitat_0, levels = c("Supralittoral","Intertidal",'Subtidal','Bathypelagic','Hadopelagic')))
+#write.csv(phylum_top5, 'phylum_top5.csv', quote = FALSE)
+
+
+dominant_bxp <- ggplot(data=phylum_top5, aes(Habitat_0,value*100),alpha=0.9)+
+  geom_boxplot(aes(fill=Habitat_0))+
+  scale_fill_brewer(palette = 'Set3')+
+  facet_grid(phylum~. , scales="free")+
+  theme_bw()+
+  theme(axis.text.x=element_text(size=12,angle = 45,hjust=1),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 15),
+        strip.text = element_text(size=12),
+        strip.background = element_rect(fill='grey93',color = 'grey'),
+        panel.background = element_rect(fill = 'transparent'),
+        panel.border = element_rect(color = 'grey'),
+        legend.position = 'none')+
+  #stat_compare_means(aes(label = paste0("p=",stat(p.format),",\ ", stat(p.signif))),
+                    # method = "kruskal.test",label.y = 30,paired = T)+
+  labs(x = '', y = 'Relative Abundance(%)',face='bold')
+  #stat_signif(comparisons = combn(levels(phylum_top5$Habitat_0),2, simplify = F,test = 'mann.test'),step_increase = 0.2,map_signif_level=T)
+dominant_bxp
+
+
+###########################################################################
+
+domgenus =p8
+domgenus <- within(domgenus, hab <- factor(hab, levels = c("Supralittoral","Intertidal",'Subtidal','Bathypelagic','Hadopelagic')))
+
+domgenus$genus <- gsub('Candidatus Hepatoplasma', 'Ca.Hepatoplasma', domgenus$genus, fixed=TRUE)
+
+genera <- ggplot(data=domgenus, aes(hab,value*100),alpha=0.9)+
+  geom_boxplot(aes(fill=hab))+
+  scale_fill_brewer(palette = 'Set3')+
+  facet_grid(genus~.,scales = 'free_y',space = 'free_x')+
+  theme_bw()+
+  theme(axis.text.x=element_text(size=12,angle = 45,hjust=1),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 15),
+        strip.text = element_text(size=12),
+        strip.background = element_rect(fill='grey93',color = 'grey'),
+        panel.background = element_rect(fill = 'transparent'),
+        panel.border = element_rect(color = 'grey'),
+        legend.position = 'none')+
+  stat_compare_means(aes(label = paste0("p = ",stat(p.format),",\ ", stat(p.signif))),
+   method = "kruskal.test",label.y =20,paired = T)+
+   #stat_signif(comparisons = combn(levels(p6$hab),2, simplify = F,test = 'mann.test'),step_increase = 0.2,map_signif_level=T)+
+  labs(x = '', y = 'Relative Abundance(%)',face='bold')
+genera
+ggsave("sup/domgenus_1.tiff", plot=genera, device="tiff",width=100, height=200, units="mm", dpi=500)
+
+library(doBy)
+d <- summaryBy(value ~ genus+hab, data = domgenus, FUN = c(length,mean,sd,median))
+names(d)[names(d)=='value.length'] <- 'N'
+d$value.se <- d$value.sd / sqrt(d$N)
+d <- within(d, hab <- factor(hab, levels = c('Supralittoral','Intertidal',"Subtidal",'Bathypelagic','Hadopelagic')))
+
+
+a <- ggplot(d, aes(hab, value.median))+
+  geom_line(size=1,group=1) +
+  geom_point(size=3)+
+  facet_grid(genus~.,scales = 'free')+
+  geom_errorbar(aes(ymin=value.median-value.se, ymax=value.median+value.se),
+                width=0.2, size=0.25
+                )+
+  labs(x = '', y = 'Relative Abundance',face='bold')+
+  theme_bw()+
+  theme(axis.text.x=element_text(size=12,angle = 45,hjust=1),
+        axis.text = element_text(size = 12),
+        axis.title = element_text(size = 15),
+        strip.text = element_text(size=12),
+        strip.background = element_rect(fill='grey93',color = 'grey'),
+        panel.background = element_rect(fill = 'transparent'),
+        panel.border = element_rect(color = 'grey'),
+        legend.position = 'none')
+a
+ggsave("SUP/domgenus_2.tiff", plot=a, device="tiff",width=110, height=220, units="mm", dpi=500)
+
+
+library(DescTools)
+LeveneTest(p6$value,p6$hab,center = "mean")
+kruskal.test(value ~hab, data = p6)
+
+############################################################################################################
+#tendency 
+phylum_top5 <- taxa_top(p2,5,group)
+
+
+lm <- ggplot(phylum_top5,aes(x=depth, y=value*100)) +
+  geom_jitter(color="royalblue4", size=3, alpha=0.8) +
+  geom_smooth(color = "black",method='lm',formula=y~x, size = 1)+
+  facet_wrap(taxa~.,scales = 'free',nrow=1)+
+  theme_bw()+
+  theme(axis.title = element_text(size = 16),
+        axis.text = element_text(size=13),
+        panel.grid.minor = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_text(size=14),
+        panel.border = element_rect(colour = "black", fill = NA))+
+  stat_cor(aes(label = paste(stat(r.label),stat(p.label),sep = "*\", \"*")),method = 'pearson',
+           size = 4,p.accuracy = 0.001, r.accuracy = 0.001,label.x = 3000)+
+  xlab("Depth(m)")+ylab("Relative Abundance(%)")
+
+fit2 <- loess(value~depth, data = phylum_top10, span = 0.75)
+summary(fit2)
+ggplot(aqua,aes(x=depth, y=value)) +
+  geom_point() +
+  geom_smooth( method = 'lm',formula=y~x )+
+
+  geom_jitter(color = 'black',size=0.4, alpha=0.9) +
+  facet_wrap(~taxa,scales = 'free',nrow = 1)+
+
+  theme(panel.grid.major = element_line(color = 'gray', size = 0.2),
+        panel.background = element_rect(color = 'black',
+                                        fill = 'transparent'),
+        plot.title = element_text(hjust = 0.5,size = 20),
+        legend.position = 'none',legend.key = element_rect(fill = 'transparent'),
+        strip.text = element_text(size=14))+
+  geom_jitter( size=0.4, alpha=0.9) +
+  stat_cor(aes(label = paste(stat(rr.label),stat(p.label),sep = "*\", \"*")),
+           method = 'pearson',
+           size = 4,p.accuracy = 0.001, r.accuracy = 0.001)+
+  xlab("")+ylab("")
+
+
