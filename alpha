@@ -30,21 +30,6 @@ kruskal.test(value ~diet, data = faith)
   faith_dunn <- dunn_test(value ~ Habitat_0, data = faith)
 write.table(faith_dunn, file='alpha_test/faith_diet_dunntest.tsv',quote=F,row.names = F,sep = '\t')
 
-shannon <- read.delim('alpha-indices/zong/shannon.txt ',header = TRUE)%>% merge(group, by = 'sample')
-boxplot(value ~ Habitat_0, data = shannon)
-kruskal.test(value ~ Habitat_0, data = shannon)
-  shannon_dunn <- dunn_test(value ~ Habitat_0, data = shannon)
-kruskal.test(value ~ diet, data = shannon)
-  shannon_dunn <- dunn_test(value ~ diet, data = shannon)
-write.table(shannon_dunn, file='alpha_test/shannon_diet_dunntest.tsv',quote=F,row.names = F,sep = '\t')
-
-ev <- read.delim('alpha-indices/zong/pielou.txt ',header = TRUE)%>% merge(group, by = 'sample')
-boxplot(value ~ Habitat_0, data = ev)
-kruskal.test(value ~ Habitat_0, data = ev)
-  ev_dunn <- dunn_test(value ~ Habitat_0, data = ev)
-kruskal.test(value ~ diet, data = ev)
-  ev_dunn <- dunn_test(value ~ diet, data = ev)
-write.table(ev_dunn, file='alpha_test/ev_diet_dunntest.tsv',quote=F,row.names = F,sep = '\t')
 
 
 
@@ -85,32 +70,7 @@ a <- ggplot(cdata, aes(Habitat_0, value.mean))+
 a
 ggsave("all_alpha.pdf", plot=a,width=100, height=180, units="mm", dpi=600)
 ###########################################################barplot
-data <- within(data, diet <- factor(diet, levels = c('Detritivore','Herbivore',"Scavenger")))
-data <- within(data, Habitat_0 <- factor(Habitat_0, levels = c('Supralittoral','Intertidal',"Subtidal",'Bathypelagic','Hadopelagic')))
-da <- ggplot(data, aes(Habitat_0, value))+
-  geom_boxplot()+
-  facet_wrap(~index,scales = 'free',ncol=2)+
-  labs(x = '', y = '',face='bold')+
-  theme_bw()+
-  theme(axis.text.x = element_text(size = 10,angle = 45,hjust=1),
-        axis.text = element_text(size = 12),
-        axis.title = element_text(size = 15),
-        strip.text = element_text(size=14),
-        panel.grid.minor = element_blank(),
-        strip.background = element_blank(),
-        panel.border = element_rect(colour = "black", fill = NA),
-        legend.position = 'top',
-        legend.text = element_text(size=12)
-        )+
-  labs(fill='')+
-  stat_compare_means(label.y.npc = 'bottom')
-  geom_signif(comparisons = combn(levels(data$Habitat_0),2, simplify = F),step_increase = 0.2,map_signif_level=T)
-  #scale_fill_manual(values=wes_palette("Darjeeling2"))
-da
-ggsave("alpha-73-hab.tiff", plot=da,width=190, height=180, units="mm", dpi=600)
 
-###################################################################################
-##################################lm
 m_alpha<-read.delim('alpha-indices/haiyang/alpha-aqua.txt ',header = TRUE)
 
 indicelm <- ggplot(m_alpha,aes(x=depth, y=value)) +
@@ -130,7 +90,7 @@ indicelm <- ggplot(m_alpha,aes(x=depth, y=value)) +
 indicelm
 ggsave("alpha-ae2.png", plot=indicelm,width=160, height=180, units="mm", dpi=600)
 
-# Plot
+
 
 data <- read.delim('tax - 副本/domphyla_counts.txt ',header = TRUE) %>% melt()
 group <- read.delim('../metadata-amphi.tsv', sep = '\t', stringsAsFactors = FALSE)
@@ -158,57 +118,9 @@ print(lm)
 png('alpha-mar-lm.png')
 print(lm)
 dev.off()
- #stat_poly_eq(aes(label = paste(stat(adj.rr.label),stat(p.value.label),sep = "*\", \"*")),formula = y ~ x, parse = T, size = 4,label.y.npc = 'bottom' ,rr.digits = 2,p.digits =7)
-
-ggplot(data,aes(x=depth, y=value)) +
-  geom_point() +
-  geom_smooth(method = 'lm', formula=y~x)+
-  stat_poly_eq(aes(label = paste(stat(adj.rr.label))),
-               formula = y ~ x, parse = T, size = 3,label.x = 0.1, label.y = 0.99) +
-  facet_wrap(~index,scales = 'free')+
-  theme(panel.grid.major = element_line(color = 'gray', size = 0.2),
-        panel.background = element_rect(color = 'black', fill = 'transparent'),
-        plot.title = element_text(hjust = 0.5),
-        legend.key = element_rect(fill = 'transparent')) +
-  geom_jitter(color="black", size=0.4, alpha=0.9) +
-  theme(
-    legend.position="none",
-    plot.title = element_text(size=11)
-  ) +
-  ggtitle("Alpha Index") +
-  xlab("")+ylab("")
 
 
-ggplot(sample_habitat,aes(x=depth, y=PCoA1)) +
-  geom_point() +
-  geom_smooth(method = 'lm', formula=y~x)+
-  stat_cor(aes(label = paste(stat(r.label),stat(p.label),sep = "*\", \"*")),method = 'pearson',
-           size = 4,p.accuracy = 0.001, r.accuracy = 0.001)+
-  #stat_poly_eq(aes(label = paste(stat(adj.rr.label))),
-  #             formula = y ~ x, parse = T, size = 3,label.x = 0.1, label.y = 0.99) +
-  theme(panel.grid.major = element_line(color = 'gray', size = 0.2),
-        panel.background = element_rect(color = 'black', fill = 'transparent'),
-        plot.title = element_text(hjust = 0.5),
-        legend.key = element_rect(fill = 'transparent')) +
-  geom_jitter(color="black", size=0.4, alpha=0.9) +
-  theme(
-    legend.position="none",
-    plot.title = element_text(size=11)
-  ) +
-  ggtitle("Alpha Index") +
-  xlab("")+ylab("")
-#
 
-#stat_fit_tb(tb.type = 'fit.summary',method='lm',
-            #tb.vars = c(Parameter = "term",
-                        #Estimate = "estimate",
-                       # "s.e." = "std.error",
-                      #  "italic(t)" = "statistic",
-                      #  "italic(P)" = "p.value"),
-           # label.y = 0.87,label.x = 0.1,size=4,parse = T)
-
-###########
-######
 
 data <- read.delim('alpha-indices/zong/all-alpha.txt ',header = TRUE)
 
@@ -267,93 +179,8 @@ data <- within(data, host_species <- factor(host_species, levels = c( 'Princaxel
 ggsave("pcoa1-depth.tiff", plot=pcoa_ds_pcoa1_depth_lm, device="tiff",
         width=100, height=100, units="mm", dpi=500)
 
-ggplot(data, aes(diet,value))+
-  geom_boxplot(aes(fill=diet))+
-  facet_wrap(~index, scales="free")+
-  theme(axis.text.x=element_blank())+
-  theme_bw()+
-  theme(panel.grid = element_blank(),
-        axis.text = element_text(size=12),
-        axis.text.x = element_text(angle=45, hjust=1),
-        axis.title = element_text(size=14),
-        legend.key.size = unit(10, "mm"),
-        legend.text = element_text(size=12),
-        legend.title = element_text(size=14))+
-  labs(x='',y='')
- # geom_signif(comparisons = combn(levels(data$Habitat_0),2, simplify = F), step_increase = 0.2)
-
-#compare_means()
-
-ggplot(data, aes(lifestyle,value))+
-  geom_boxplot(aes(fill=lifestyle))+
-  facet_wrap(~index, scales="free")+
-  theme(axis.text.x=element_blank())
-
-
-###########################################################################
-
-
-stat.test <- data %>%
-  group_by(index) %>%
-  mann_test(value~Habitat_1) %>%
-  adjust_pvalue(method = "bonferroni") %>%
-  add_significance()
-stat.test
-
-stat.test <- stat.test %>% add_xy_position(x='Habitat_1')
-bxp <- ggboxplot(data,x='Habitat_1',y='value',xlab = FALSE,
-                 palette = "Spectral", add = "jitter", facet.by = "index",
-                 short.panel.labs = TRUE, fill = 'Habitat_1',scales='free')+
-                 stat_pvalue_manual(stat.test)
-
-
-print(bxp)
-
-write.table(stat.test,file = 'pairwise-alpha-marine.txt',row.names = FALSE)
-write.tab
 
 
 
 
-########################################
-###############模型的检验 输出summary
-library(plyr)
-# Break up d by state, then fit the specified model to each piece and
-# return a list
-models <- dlply(data, "index", function(df)
-  lm(value ~ depth, data = df))
 
-# Apply coef to each model and return a data frame
-ldply(models, coef)
-
-# Print the summary of each model
-l_ply(models, summary, .print = TRUE)
-
-summary(models)
-
-#########################################################################
-##########回归系数t检验
-library(nlme)
-lmList(value ~ depth | index, data=data) %>% summary
-#########################################################################
-my.loess <- loess(value~depth | index, data=data)
-# get SE
-myPred <- predict(my.loess, se=T)
-my.output <- data.frame("fitted"=myPred$fit, "SE"=myPred$se.fit)
-
-# write out data
-write.csv(my.output, file='loess.csv')
-
-
-# Plot
-data %>%
-  ggplot( aes(x=index, y=value, fill=names,group=index)) +
-  geom_boxplot() +
-  scale_fill_viridis(discrete = TRUE, alpha=0.6) +
-  geom_jitter(color="black", size=0.4, alpha=0.9) +
-  theme(
-    legend.position="none",
-    plot.title = element_text(size=11)
-  ) +
-  ggtitle("A boxplot with jitter") +
-  xlab("")
