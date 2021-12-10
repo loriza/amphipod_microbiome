@@ -1,0 +1,74 @@
+library(circlize)
+library(reshape2)
+##鍗曚釜鑺傜偣缁樺埗
+#璇诲彇鏁版嵁
+
+mtg.pval.82 <- read.table('./mtg2_pval.txt',sep = '\t',header = T)
+mtg.cor.82 <- read.table('./mtg2_corr.txt',sep = '\t',header = T)
+vargroup
+
+
+pval_corr_pair <- function(pval,corr,rcutoff,vargroup){
+  corr <- melt(corr)
+  pval <- melt(pval)
+  
+  df <- cbind(corr,pval)
+  df <- df[,-c(4,5)]
+  df = df[which(df[,3]!=0),]
+  df = df[which(df[,4]<=0.05),]
+  df = df[which(abs(df[,3])>rcutoff),]
+  names(df)[2] <- 'index'
+  
+  if (!is.null(vargroup)) {
+    df <- merge(df,vargroup,by = 'index') 
+    df <- df[order(df[5]),]
+  }
+  return(df)
+}
+mtg_corr<-pval_corr_pair(pval,cor,0.4,vargroup)
+
+
+vargroup_count <- doBy::summaryBy(value ~ var_group, data = mtg_corr, FUN = c(length))
+
+
+mtg <- mtg_corr[[2]]
+index <- mtg_corr[[1]]
+
+othercol <- structure(rep("skyblue", length(mtg)), names = mtg)
+linkcols <- colorRamp2(c(-1,0,1),c("blue","white","red"),transparency = 0.5)
+group_set <- c(rep("red", 23), rep("blue", 1), rep("yellow", 4), rep("grey", 1),
+                                      rep("purple", 73))
+#col_set = c(rep("red", 3), rep("blue", 63), rep("yellow", 15), rep("grey", 8),
+#            rep("orange", 18),rep("purple", 60))
+#col_set = c(rep("red", 23), rep("blue", 1), rep("yellow", 4), rep("grey", 1),
+#                       rep("purple", 73))
+names(group_set) = index
+col_set
+grid.col = c(group_set,othercol)
+#png('edge1.png', width = 2000, height = 2000, res = 300, units = 'px')
+pdf('sp.pdf', height = 20, width = 20)
+
+chordDiagram(edge,
+             transparency = 0.9,
+             preAllocateTracks = 1,
+	annotationTrack = c('grid'),
+	col = linkcols,
+	#grid.col = grid.col,
+	annotationTrackHeight = c(0.035, 0.015)
+)
+circos.trackPlotRegion(track.index = 1, panel.fun = function(x, y) {
+  xlim = get.cell.meta.data("xlim")
+  ylim = get.cell.meta.data("ylim")
+  sector.name = get.cell.meta.data("sector.index")
+  circos.text(mean(xlim), ylim[1] + .1, sector.name, facing = "clockwise", niceFacing = TRUE, adj = c(0, 0.5), col = "gray")
+}, bg.border = NA)
+
+
+legend("right",pch=20,legend=vargroup_count$var_group,
+       col=group_set,bty="n",
+       cex=1,pt.cex=3,border="black") # 设定图例
+
+
+dev.off()
+
+
