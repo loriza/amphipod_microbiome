@@ -1,0 +1,173 @@
+library(vegan)
+library(psych)
+library(tidyverse)
+library(ggplot2)
+phenoPath <- 'phenotype/20211104-contin2.csv'
+catPath <- '82渚嬩复搴婃暟鎹?20211104-鍒嗙被鍙橀噺.csv'
+commuPath <- '5.abundance.strain2.s.prof.tsv'
+clin <- 'clinical-type.txt'
+outputPath <- '.'
+nancutoff <- 0.5
+
+phen <- read.csv(phenoPath, header = TRUE, 
+                 stringsAsFactors = F, check.names = FALSE, row.names = 1)
+phen[phen == ''] <- NA
+
+cat <- read.csv(catPath, header = TRUE, 
+                stringsAsFactors = F, check.names = FALSE, row.names = 1)
+clinical <- read.table(clin, header = TRUE, sep='\t',
+                stringsAsFactors = F, check.names = FALSE)
+sp  <- read.table(commuPath, sep = '\t', header = TRUE, stringsAsFactors = FALSE, check.names = FALSE, row.names = 1)
+sp.dist <- vegdist(sp)
+
+
+############################################################################
+clean_data <- function(x,nancutoff){
+  a = rownames(x)
+  x = lapply(x, as.numeric) %>% as.data.frame()
+  row.names(x) <- a
+  x <- x[,!apply(x,2,function(y){sum(is.na(y))/nrow(x)>nancutoff})]
+  for(i in 1:ncol(x)){
+    x[,i][which(is.na(x[,i]))] = mean(x[,i],na.rm = T)
+  }
+  return(x)
+}
+
+
+adonis_each <- function(x,y){
+  data1 = matrix(rep(0,ncol(x)*3),ncol = 3)
+  data1[,1] = colnames(x)
+  colnames(data1) = c("name","R2","P")
+  for(i in 1:ncol(x)){
+    a = adonis(y~x[,i]) 
+    data1[i,2] = a$aov.tab$R2[1]
+    data1[i,3] = a$aov.tab$`Pr(>F)`[1]
+  }
+  return(data1)
+}
+
+select_acc2pval <- function(x, y, pval,dist){
+  #x - output of adonis_each
+  #y - phenotype file
+  x <- x[order(x[,'R2'],decreasing = T),] %>% as.data.frame()
+  x_s <- x[x$P <= pval,]
+  corr_self <- function(x,y){
+    #x - adonis_each output file
+    #y - phenotype file
+    cutoff = 0.5
+    name = x[,1]
+    pheno = y[,name]
+    corr_pheno = corr.test(pheno)
+    a = corr_pheno$r
+    for(i in 1:nrow(a)){
+      for(j in i:nrow(a)){
+        a[j,i] = 0
+      }
+    }
+    for(k in 1:nrow(x)){
+      a = a[!a[k,]>cutoff,!a[k,]>cutoff]
+      if(nrow(a)==k){
+        break
+      }
+    }
+    return(row.names(a))
+  }
+  y_s<- y[,corr_self(x_s, y)]
+  s_adonis <- adonis(dist~.,data = y_s)
+  return(s_adonis)
+}
+
+
+
+#########################################################
+phen <- clean_data(phen,0.5)
+cat <- clean_data(cat,0.5)
+
+phen_plot <- phen
+phen_plot['SampleID'] <-rownames(phen)
+phen_plot <- merge(clinical, phen_plot, by = "SampleID", all.x = F)
+row.names(phen_plot) <- phen_plot[,1]
+phen_plot_s <- phen_plot[,-c(1,2)]
+
+phen_plot_s 
+gm.pca <- gmodels::fast.prcomp(t(phen_plot_s))
+library(ggbiplot)
+ggbiplot(gm.pca, labels=rownames(phen.t))
+
+
+ggplot(pca_df_gm,aes(x=PC1,y=PC2,color = group))+
+  geom_point(size=4)+
+  #geom_text_repel(data=spp,aes(x=PC1,y=PC2),label=row.names(spp))+
+  geom_hline(yintercept=0,linetype=3,size=1)+ 
+  geom_vline(xintercept=0,linetype=3,size=1)+
+  labs(x=paste("PC1", sep=""),
+       y=paste("PC2", sep=""))+
+  guides(shape=guide_legend(title = NULL),fill=guide_legend(title = NULL))+
+  theme_bw()+theme(panel.grid = element_blank())
+
+#########################################
+library(Rtsne)
+tsne_phen <- Rtsne(phen_plot_s, perplexity =10)
+#plot(tsne_prot$Y)
+
+tsne_plot <- data.frame(tsne1=tsne_phen$Y[,1],tsne2=tsne_phen$Y[,2], group = phen_plot[,2])
+
+ts1_phen <- ggplot(tsne_plot,aes(x=tsne1,y=tsne2,color=group)) +
+  geom_point(size=1, alpha=0.8)+
+  theme_classic()+
+  theme(legend.position = 'top')+
+  labs(color='')+
+  scale_color_brewer(palette = 'Set1')
+ggsave('tsne_pheno.pdf', ts1_phen, width = 100, height = 110, unit='mm',dpi =300)
+
+#########################################
+library(uwot)
+library(ggplot2)
+#UMAP鍒嗘瀽
+umap_plot <- umap(phen_plot_s ,n_neighbors = 10)
+
+colnames(umap_plot) <- c('UMAP1','UMAP2') 
+umap_plot <- as.data.frame(umap_plot)
+umap_plot['SampleID'] <- row.names(umap_plot)
+umap_plot <- merge(umap_plot,clinical, by ='SampleID')
+
+
+u_pheno <- ggplot(umap_plot, aes(x=UMAP1, y=UMAP2, color= group)) + 
+  geom_point(size=1, alpha=0.8)+
+  theme_classic()+
+  theme(legend.position = 'top')+
+  labs(color='')+
+  scale_color_brewer(palette = 'Set1')
+ggsave('umap_pheno.pdf', u_pheno, width = 100, height = 110, unit='mm',dpi =300)
+
+#########################################
+
+res_adonis_each <- adonis_each(phen_clean,sp.dist)
+#write.table(res_adonis_each,file = 'adonis_each_res.tsv',sep='\t',quote = FALSE,row.names = F)
+s_adonis_res <- select_acc2pval(res_adonis_each, pheno_clean, 0.5, sp.dist)  
+
+adonis_r_adj = RsquareAdj(s_adonis_res[[1]][5][,1][length(s_adonis_res[[1]][5][,1])-1],410,
+                          length(s_adonis_res[[1]][5][,1])-2)
+
+out <- s_adonis_res$aov.tab
+out['variable'] <- rownames(out)
+out <- out[length(out)-2,]
+
+p <- ggplot(out, aes(x=reorder(variable,R2), y=R2)) +
+  geom_col(position = 'identity', width = 0.3) +
+  labs(x = '', y = 'Effect size') +
+  theme(
+        panel.grid = element_blank(), 
+        panel.background = element_rect(color = 'black', fill = 'transparent')
+        ) +
+  theme(axis.text.x = element_text(size = 6, angle = 60,hjust=1),
+        axis.text.y = element_text(size = 9),
+        axis.title = element_text(size = 10)
+        )+
+  coord_flip()
+
+p
+ggsave('adonis_r2_bar_sig0.05.pdf', p, width = 6, height = 6)
+
+
+
