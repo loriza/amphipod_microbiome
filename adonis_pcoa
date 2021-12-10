@@ -1,0 +1,73 @@
+
+
+adonis_each <- function(x,y){
+  #y = community div matrix
+  #x = variable dataframe
+  data1 = matrix(rep(0,ncol(x)*3),ncol = 3)
+  data1[,1] = colnames(x)
+  colnames(data1) = c("name","R2","P")
+  for(i in 1:ncol(x)){
+    a = adonis(y~x[,i], permutations = 9999) 
+    data1[i,2] = a$aov.tab$R2[1]
+    data1[i,3] = a$aov.tab$`Pr(>F)`[1]
+  }
+  return(data1)
+}
+
+ct_s <- ct[,-1]
+ct_adonis_each <- adonis_each(ct_s,mtg.dist)
+s_adonis <- adonis(mtg.dist~.,data = ct_s,permutations = 9999)
+ct_adonis <- as.data.frame(s_adonis$aov.tab)
+
+
+pcoa_plot = function(metadata,pcoa_object, axis1, axis2, chosen_list_no)
+{ 
+  names(metadata)[chosen_list_no] <-'group'
+  # Store axes names
+  kept_axes = paste0("Axis.", c(axis1, axis2))
+  
+  # data.frame with values from species
+  pcoa_df = as.data.frame(pcoa_object$vectors)
+  
+  # Eigen values per axes 
+  eigen_values = pcoa_object$values$Relative_eig[c(axis1, axis2)]
+  names(eigen_values) = kept_axes
+  
+  # Axes labels in plot
+  axes_labs = lapply(kept_axes, function(x) {
+    paste0(gsub(".", " ", x, fixed = TRUE),
+           " (", round(eigen_values[x] * 100, 2), "%)")
+  })
+  
+  #merge  metadata
+  pcoa_df$names <- rownames(pcoa_df)
+  metadata$names <- rownames(metadata)
+  
+  pcoa_df <- merge(pcoa_df, metadata,by ='names', all.x = T)
+  
+ 
+  library(ggsci)
+  given_pcoa_plot2 = ggplot(pcoa_df,aes_string(x = kept_axes[1],
+                                               y = kept_axes[2])
+                                        ) +
+    geom_point(aes(color=group))+
+    scale_color_lancet()+
+    scale_shape_manual(values = c(19,17,15,25,18))+
+    labs(x = paste('PCoA',axes_labs[[1]]),
+         y = paste('PCoA',axes_labs[[2]]))+
+    theme_bw() +
+    theme(
+          panel.grid = element_blank(),
+          legend.position = 'right',
+          legend.title = element_text(size=12,face='bold'),
+          legend.text = element_text(size=12),
+          axis.title=element_text(size=12,face = "bold")
+    )
+   
+}
+
+ct_g <- ct[,1:2]
+
+pcoa_mtg <- ape::pcoa(mtg.dist)
+a<-pcoa_plot(ct_g, pcoa_mtg,1,2,2)
+a
