@@ -8,7 +8,7 @@ clean_data <- function(x,nancutoff){
   a = rownames(x)
   x = lapply(x, as.numeric) %>% as.data.frame()
   row.names(x) <- a
-  #drop those with missing value over cutoff
+  #保留缺失率在cutoff以下的col
   if (!is.null(nancutoff)) {
     x <- x[,!apply(x,2,function(y){sum(is.na(y))/nrow(x)>nancutoff})]
     for(i in 1:ncol(x)){
@@ -18,6 +18,18 @@ clean_data <- function(x,nancutoff){
   }
 }
 
+
+des <- function(mappingfile,cont,list_no){
+  
+  a = row.names(mappingfile)
+  mappingfile = as.data.frame(mappingfile[,list_no])
+  names(mappingfile)[1]<- 'group'
+  row.names(mappingfile) <- a
+  
+  h = merge_df(mappingfile,cont,0.3) %>% melt()
+  normal.des <- doBy::summaryBy(value ~ variable+group, data = h, FUN = c(mean,median,sd,max))
+ 
+}
 
 merge_df <- function(mappingfile,cont,cutoff){
   cont <- clean_data(cont,cutoff)
@@ -31,20 +43,8 @@ merge_df <- function(mappingfile,cont,cutoff){
 }
 
 
-des <- function(mappingfile,cont,list_no){
-  
-  a = row.names(mappingfile)
-  mappingfile = as.data.frame(mappingfile[,list_no])
-  names(mappingfile)[1]<- 'group'
-  row.names(mappingfile) <- a
-  
-  h = merge_df(mappingfile,cont,0.7) %>% melt()
-  normal.des <- doBy::summaryBy(value ~ variable+group, data = h, FUN = c(mean,median,sd,max))
- 
-}
-n.des <- des(ct_g,cont68,1)
-
 kw_each <- function(df,m,group_no){
+  #df - the output of 'merge_df'
   #x=varible df
   #y=mapping
   #m = no. of cat var
@@ -60,16 +60,17 @@ kw_each <- function(df,m,group_no){
   df <- cbind(x,y)
   results <- list()
   library(broom)
-  for(i in 2:ncol(x)){
+  for(i in 1:ncol(x)){
     print(paste((colnames(df)[i]), "~ group"))
     df2 <- df %>% gather(key, value, -group) %>% 
       group_by(key) %>% 
       do(tidy(kruskal.test(x= .$value, g = .$group)))
-    }
+  }
+  return(df2)
   }
   
 
-normal<-kw_each(a,2,1)
+inf_kw<-kw_each(a,2,2)
 
 
-write.table(vargroup,file = 'vargr.tsv',sep='\t',quote = FALSE,row.names = F)
+write.table(inf.des,file = './infl_des.tsv',sep='\t',quote = FALSE,row.names = F)
