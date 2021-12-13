@@ -1,0 +1,54 @@
+#读入文件
+gene_list <- read.table('sasp gene list.txt')
+names(gene_list)[1] <- 'gene_name'
+ko <- read.csv('all_compare_KO.csv',header = T,row.names = 1)
+si <- read.csv('all_compare_si.csv',header = T,row.names = 1)
+
+expression_input <- function(data,gene_list){
+  data_fpkm <- data[grep("fpkm", names(data), value=TRUE)]##提取列名带fpkm的列
+  gene_name <- data[grep("gene_name", names(data), value=TRUE)]
+
+  data_exp <- cbind(data_fpkm,gene_name)
+#给list的列名换名字
+  
+#用两者共有的列‘gene name’做纽带，合并
+  data_exp <- merge(data_exp,gene_list,by = 'gene_name')
+  row.names(data_exp) <- data_exp$gene_name
+  data_exp <- data_exp[,-1]
+  data_exp <-data_exp[apply(data_exp,1,var)!=0,] 
+  return(data_exp)
+}
+
+fpkm <- expression_input(si,gene_list)
+names(fpkm) <- gsub('_fpkm',"",names(ko_fpkm))
+log2_fpkm <- log2(fpkm+1)
+
+
+heatmaply::heatmaply(fpkm, 
+                     file= './si_fpkm_zs.png',
+                     width = 500,
+                     height =700,
+                     scale = 'row',
+                     key.title = 'Z-score',
+                     hclust_method = 'complete'
+                     #k_col =2,
+                     )
+library(viridis)
+a = pheatmap::pheatmap(fpkm,
+                   scale = 'row',
+                   border_color = 'white',
+                   cluster_cols = T,
+                   cluster_rows = T,
+                   clustering_method = 'complete'
+                  
+                   )
+save_pheatmap_pdf <- function(x, filename, width=5, height=7) {
+  stopifnot(!missing(x))
+  stopifnot(!missing(filename))
+  pdf(filename, width=width, height=height)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+}
+
+save_pheatmap_pdf(a, "si_fpkm_zs_cluster.pdf")
