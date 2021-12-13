@@ -1,0 +1,75 @@
+
+library(tidyverse)
+library(reshape2)
+cont68 <- read.table('./phenotype/20211104-contin2.txt', header = TRUE, sep = '\t',
+                 stringsAsFactors = F, check.names = FALSE, row.names = 1)
+
+clean_data <- function(x,nancutoff){
+  a = rownames(x)
+  x = lapply(x, as.numeric) %>% as.data.frame()
+  row.names(x) <- a
+  #drop those with missing value over cutoff
+  if (!is.null(nancutoff)) {
+    x <- x[,!apply(x,2,function(y){sum(is.na(y))/nrow(x)>nancutoff})]
+    for(i in 1:ncol(x)){
+      x[,i][which(is.na(x[,i]))] = mean(x[,i],na.rm = T)
+    }
+    return(x)
+  }
+}
+
+
+merge_df <- function(mappingfile,cont,cutoff){
+  cont <- clean_data(cont,cutoff)
+
+  cont$id <- row.names(cont)
+  mappingfile$id <- row.names(mappingfile)
+  cont <- merge(mappingfile,cont, by ='id')
+  row.names(cont) <- cont$id
+  cont = cont[,-1]
+  return(cont)
+}
+
+
+des <- function(mappingfile,cont,list_no){
+  
+  a = row.names(mappingfile)
+  mappingfile = as.data.frame(mappingfile[,list_no])
+  names(mappingfile)[1]<- 'group'
+  row.names(mappingfile) <- a
+  
+  h = merge_df(mappingfile,cont,0.7) %>% melt()
+  normal.des <- doBy::summaryBy(value ~ variable+group, data = h, FUN = c(mean,median,sd,max))
+ 
+}
+n.des <- des(ct_g,cont68,1)
+
+kw_each <- function(df,m,group_no){
+  #x=varible df
+  #y=mapping
+  #m = no. of cat var
+ 
+  names(df)[group_no] <- 'group'
+  min = m+1
+  x = df[,min:dim(df)[2]]
+  
+  y = as.data.frame(df[,'group'])
+  names(y)[1]<- 'group'
+  row.names(y) <- row.names(df)
+  
+  df <- cbind(x,y)
+  results <- list()
+  library(broom)
+  for(i in 2:ncol(x)){
+    print(paste((colnames(df)[i]), "~ group"))
+    df2 <- df %>% gather(key, value, -group) %>% 
+      group_by(key) %>% 
+      do(tidy(kruskal.test(x= .$value, g = .$group)))
+    }
+  }
+  
+
+normal<-kw_each(a,2,1)
+
+
+write.table(vargroup,file = 'vargr.tsv',sep='\t',quote = FALSE,row.names = F)
