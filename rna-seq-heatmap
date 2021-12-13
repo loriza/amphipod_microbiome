@@ -1,17 +1,15 @@
-#读入文件
+
 gene_list <- read.table('sasp gene list.txt')
 names(gene_list)[1] <- 'gene_name'
 ko <- read.csv('all_compare_KO.csv',header = T,row.names = 1)
 si <- read.csv('all_compare_si.csv',header = T,row.names = 1)
 
 expression_input <- function(data,gene_list){
-  data_fpkm <- data[grep("fpkm", names(data), value=TRUE)]##提取列名带fpkm的列
+  data_fpkm <- data[grep("fpkm", names(data), value=TRUE)]
   gene_name <- data[grep("gene_name", names(data), value=TRUE)]
 
   data_exp <- cbind(data_fpkm,gene_name)
-#给list的列名换名字
-  
-#用两者共有的列‘gene name’做纽带，合并
+
   data_exp <- merge(data_exp,gene_list,by = 'gene_name')
   row.names(data_exp) <- data_exp$gene_name
   data_exp <- data_exp[,-1]
