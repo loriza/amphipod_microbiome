@@ -1,11 +1,20 @@
-
+#读入文件
 gene_list <- read.table('sasp gene list.txt')
 names(gene_list)[1] <- 'gene_name'
 ko <- read.csv('all_compare_KO.csv',header = T,row.names = 1)
 si <- read.csv('all_compare_si.csv',header = T,row.names = 1)
 
+save_pheatmap_pdf <- function(x, filename, width=5, height=7) {
+  stopifnot(!missing(x))
+  stopifnot(!missing(filename))
+  pdf(filename, width=width, height=height)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+}
+
 expression_input <- function(data,gene_list){
-  data_fpkm <- data[grep("fpkm", names(data), value=TRUE)]
+  data_fpkm <- data[grep("fpkm", names(data), value=TRUE)]##提取列名带fpkm的列
   gene_name <- data[grep("gene_name", names(data), value=TRUE)]
 
   data_exp <- cbind(data_fpkm,gene_name)
@@ -17,13 +26,13 @@ expression_input <- function(data,gene_list){
   return(data_exp)
 }
 
-fpkm <- expression_input(si,gene_list)
-names(fpkm) <- gsub('_fpkm',"",names(ko_fpkm))
+fpkm <- expression_input(ko,gene_list)
+names(fpkm) <- gsub('_fpkm',"",names(fpkm))
 log2_fpkm <- log2(fpkm+1)
 
 
 heatmaply::heatmaply(fpkm, 
-                     file= './si_fpkm_zs.png',
+                     file= './si_fpkm_zs.pdf',
                      width = 500,
                      height =700,
                      scale = 'row',
@@ -32,21 +41,13 @@ heatmaply::heatmaply(fpkm,
                      #k_col =2,
                      )
 library(viridis)
-a = pheatmap::pheatmap(fpkm,
+a = pheatmap::pheatmap(log2_fpkm,
                    scale = 'row',
-                   border_color = 'white',
-                   cluster_cols = T,
+                   border_color = NA,
+                   cluster_cols = F,
                    cluster_rows = T,
-                   clustering_method = 'complete'
-                  
+                   clustering_method = 'complete',
+                   angle_col = 45
                    )
-save_pheatmap_pdf <- function(x, filename, width=5, height=7) {
-  stopifnot(!missing(x))
-  stopifnot(!missing(filename))
-  pdf(filename, width=width, height=height)
-  grid::grid.newpage()
-  grid::grid.draw(x$gtable)
-  dev.off()
-}
 
-save_pheatmap_pdf(a, "si_fpkm_zs_cluster.pdf")
+save_pheatmap_pdf(a, "ko_log2fpkm_zs_rowclust.pdf")
