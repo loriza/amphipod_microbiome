@@ -1,0 +1,13 @@
+function(x,y){
+  #y = community div matrix
+  #x = variable dataframe
+  data1 = matrix(rep(0,ncol(x)*3),ncol = 3)
+  data1[,1] = colnames(x)
+  colnames(data1) = c("name","R2","P")
+  for(i in 1:ncol(x)){
+    a = adonis(y~x[,i], permutations = 9999) 
+    data1[i,2] = a$aov.tab$R2[1]
+    data1[i,3] = a$aov.tab$`Pr(>F)`[1]
+  }
+  return(data1)
+}
