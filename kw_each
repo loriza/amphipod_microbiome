@@ -1,0 +1,38 @@
+merge_df <- function(mappingfile,cont,cutoff){
+  cont <- clean_data(cont,cutoff)
+
+  cont$id <- row.names(cont)
+  mappingfile$id <- row.names(mappingfile)
+  cont <- merge(mappingfile,cont, by ='id')
+  row.names(cont) <- cont$id
+  cont = cont[,-1]
+  return(cont)
+}
+
+kw_each <- function(df,m,group_no){
+  
+  #df - the output of 'merge_df'
+  #x=varible df
+  #y=mapping
+  #m = no. of cat var
+ 
+  names(df)[group_no] <- 'group'
+  min = m+1
+  x = df[,min:dim(df)[2]]
+  
+  y = as.data.frame(df[,'group'])
+  names(y)[1]<- 'group'
+  row.names(y) <- row.names(df)
+  
+  df <- cbind(x,y)
+  results <- list()
+  library(broom)
+  for(i in 1:ncol(x)){
+    print(paste((colnames(df)[i]), "~ group"))
+    df2 <- df %>% gather(key, value, -group) %>% 
+      group_by(key) %>% 
+      do(tidy(kruskal.test(x= .$value, g = .$group)))
+  }
+  return(df2)
+  }
+
