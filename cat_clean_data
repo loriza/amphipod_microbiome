@@ -1,0 +1,4 @@
+cat_clean_data <- function(data){
+  data <- lapply(data, as.numeric) %>% as.data.frame()%>%select_if(~!any(is.na(.)))
+  data <-data[,apply(data,2,var)!=0]
+}
