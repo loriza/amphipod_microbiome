@@ -65,7 +65,7 @@ circos.trackPlotRegion(track.index = 1, panel.fun = function(x, y) {
 
 legend("right",pch=20,legend=vargroup_count$var_group,
        col=group_set,bty="n",
-       cex=1,pt.cex=3,border="black") # 设定图例
+       cex=1,pt.cex=3,border="black") 
 
 
 dev.off()
