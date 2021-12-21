@@ -14,11 +14,6 @@ adonis_each <- function(x,y){
   return(data1)
 }
 
-ct_s <- ct[,-1]
-ct_adonis_each <- adonis_each(ct_s,mtg.dist)
-s_adonis <- adonis(mtg.dist~.,data = ct_s,permutations = 9999)
-ct_adonis <- as.data.frame(s_adonis$aov.tab)
-
 
 pcoa_plot_cat = function(metadata,pcoa_object, axis1, axis2, chosen_list_no)
 { 
@@ -65,8 +60,7 @@ pcoa_plot_cat = function(metadata,pcoa_object, axis1, axis2, chosen_list_no)
   
 }
 
-ct_g <- ct[,1:2]
 
 pcoa_mtg <- ape::pcoa(mtg.dist)
-a<-pcoa_plot(ct_g, pcoa_mtg,1,2,2)
+
 a
