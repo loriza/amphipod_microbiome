@@ -1,7 +1,6 @@
 library(circlize)
 library(reshape2)
-##鍗曚釜鑺傜偣缁樺埗
-#璇诲彇鏁版嵁
+
 
 mtg.pval.82 <- read.table('./mtg2_pval.txt',sep = '\t',header = T)
 mtg.cor.82 <- read.table('./mtg2_corr.txt',sep = '\t',header = T)
