@@ -20,9 +20,11 @@ s_adonis <- adonis(mtg.dist~.,data = ct_s,permutations = 9999)
 ct_adonis <- as.data.frame(s_adonis$aov.tab)
 
 
-pcoa_plot = function(metadata,pcoa_object, axis1, axis2, chosen_list_no)
+pcoa_plot_cat = function(metadata,pcoa_object, axis1, axis2, chosen_list_no)
 { 
+  chosenlist = names(metadata)[chosen_list_no]
   names(metadata)[chosen_list_no] <-'group'
+  #metadata$group <- as.factor(metadata$group)
   # Store axes names
   kept_axes = paste0("Axis.", c(axis1, axis2))
   
@@ -44,26 +46,23 @@ pcoa_plot = function(metadata,pcoa_object, axis1, axis2, chosen_list_no)
   metadata$names <- rownames(metadata)
   
   pcoa_df <- merge(pcoa_df, metadata,by ='names', all.x = T)
-  
- 
+  pcoa_df$group <- as.factor(pcoa_df$group)
+  row.names(pcoa_df) <- pcoa_df$names
+  pcoa_df = pcoa_df[,-1]
+  library(ggplot2)
   library(ggsci)
   given_pcoa_plot2 = ggplot(pcoa_df,aes_string(x = kept_axes[1],
                                                y = kept_axes[2])
                                         ) +
-    geom_point(aes(color=group))+
+    geom_point(aes(color=group),size =4,alpha=.8 ) +
     scale_color_lancet()+
-    scale_shape_manual(values = c(19,17,15,25,18))+
     labs(x = paste('PCoA',axes_labs[[1]]),
-         y = paste('PCoA',axes_labs[[2]]))+
-    theme_bw() +
-    theme(
-          panel.grid = element_blank(),
-          legend.position = 'right',
-          legend.title = element_text(size=12,face='bold'),
-          legend.text = element_text(size=12),
-          axis.title=element_text(size=12,face = "bold")
-    )
-   
+         y = paste('PCoA',axes_labs[[2]]),
+         color = chosenlist)+
+    theme_classic() 
+    
+  return(given_pcoa_plot2)
+  
 }
 
 ct_g <- ct[,1:2]
