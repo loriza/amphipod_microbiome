@@ -1,0 +1,100 @@
+pca_plot = function(metadata,pca_object, axis1, axis2, chosen_list_no)
+{ 
+  chosenlist = names(metadata)[chosen_list_no]
+  names(metadata)[chosen_list_no] <-'group'
+  # Store axes names
+  kept_axes = paste0("PC", c(axis1, axis2))
+  # data.frame with values from species
+  pca_df = as.data.frame(pca_object$CA$u)
+  percent_var <- pca$CA$eig/pca$tot.chi
+  percent_var <- percent_var[c(axis1, axis2)]  
+  names(percent_var) = kept_axes
+  # Axes labels in plot
+  axes_labs = lapply(kept_axes, function(x) {
+    paste0(gsub(".", " ", x, fixed = TRUE),
+           " (", round(percent_var[x] * 100, 2), "%)")
+  }) 
+  
+  #merge  metadata
+  metadata$id = row.names(metadata)
+  pca_df$id = row.names(pca_df)
+  pca_df <- merge(pca_df,metadata,by = 'id')
+  pca_df$group = as.factor(pca_df$group)
+  
+  # plot
+  ggplot(pca_df,aes_string(x = kept_axes[1],y = kept_axes[2])) +
+    geom_point(aes(color=group),size =4,alpha=.8 ) +
+    theme_classic()+
+    scale_color_lancet()+
+    labs(x = paste(axes_labs[[1]]),
+         y = paste(axes_labs[[2]]),
+         color = chosenlist)
+  
+}
+pcoa_plot_cat = function(metadata,pcoa_object, axis1, axis2, chosen_list_no)
+{ 
+  chosenlist = names(metadata)[chosen_list_no]
+  names(metadata)[chosen_list_no] <-'group'
+  #metadata$group <- as.factor(metadata$group)
+  # Store axes names
+  kept_axes = paste0("Axis.", c(axis1, axis2))
+  
+  # data.frame with values from species
+  pcoa_df = as.data.frame(pcoa_object$vectors)
+  
+  # Eigen values per axes 
+  eigen_values = pcoa_object$values$Relative_eig[c(axis1, axis2)]
+  names(eigen_values) = kept_axes
+  
+  # Axes labels in plot
+  axes_labs = lapply(kept_axes, function(x) {
+    paste0(gsub(".", " ", x, fixed = TRUE),
+           " (", round(eigen_values[x] * 100, 2), "%)")
+  })
+  
+  #merge  metadata
+  pcoa_df$names <- rownames(pcoa_df)
+  metadata$names <- rownames(metadata)
+  
+  pcoa_df <- merge(pcoa_df, metadata,by ='names', all.x = T)
+  pcoa_df$group <- as.factor(pcoa_df$group)
+  row.names(pcoa_df) <- pcoa_df$names
+  pcoa_df = pcoa_df[,-1]
+  library(ggplot2)
+  library(ggsci)
+  given_pcoa_plot2 = ggplot(pcoa_df,aes_string(x = kept_axes[1],
+                                               y = kept_axes[2])
+  ) +
+    geom_point(aes(color=group),size =4,alpha=0.8) +
+    stat_ellipse(aes(color=group))+
+    scale_color_lancet()+
+    labs(x = paste('PCoA',axes_labs[[1]]),
+         y = paste('PCoA',axes_labs[[2]]),
+         color = chosenlist)+
+    theme_classic() 
+  
+  return(given_pcoa_plot2) 
+}
+
+umap_plot_cat <- function(x,g,chosen_list_no)
+{
+  chosenlist = names(g)[chosen_list_no]
+  names(g)[chosen_list_no] <-'group'
+  library(uwot)
+  umap_plot <- umap(x,n_neighbors = 10)
+  colnames(umap_plot) <- c('UMAP1','UMAP2') 
+  umap_plot <- as.data.frame(umap_plot)
+  umap_plot <- cbind(umap_plot,g)
+  umap_plot$group <- as.factor(umap_plot$group)
+  u <- ggplot(umap_plot, aes(x=UMAP1, y=UMAP2)) + 
+    geom_point(aes(color=group),size =4,alpha=.8 ) +
+    theme_classic()+
+    theme(legend.position = 'right')+
+    scale_color_lancet()+
+    labs(color=chosenlist)
+  
+  return(u)
+}
+
+
+ggsave(a, filename = 'umap_ct_normal.tiff', device = 'tiff',width = 130,height = 100,units='mm',dpi=600)
