@@ -5,7 +5,7 @@ kw_each = function(mappingfile,cont,m,group_no){
   cont <- merge(mappingfile,cont, by ='id')
   row.names(cont) <- cont$id
   df = cont[,-1]
-  #df - the output of 'merge_df'
+ 
   #x=varible df
   #y=mapping
   #m = no. of cat var
