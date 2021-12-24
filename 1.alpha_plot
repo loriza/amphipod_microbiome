@@ -1,0 +1,40 @@
+
+richness = rowSums(mtg_82 > 0)
+shannon = diversity(mtg_82, index = 'shannon', base = exp(1))
+alpha <- data.frame(shannon,richness) 
+#ct_g = data.frame(cat78_nd[119],cat78_nd[129])
+ct_g = sequela
+alpha = merge(ct_g,alpha,by=0)
+row.names(alpha) = alpha$Row.names
+alpha = alpha[,-1]
+names(alpha)[1] <- 'group'
+names(alpha)[2] <- 'Shannon'
+names(alpha)[2] <- 'Richness'
+
+alpha$group = as.factor(alpha$group)
+alpha_m = melt(alpha)
+alpha_m 
+
+alpha_cm =ggplot(alpha_m, aes(group,value))+
+  geom_boxplot(aes(fill=group),lwd = 1.2,width = 0.5)+
+  #scale_fill_manual(values = c("#f3a583","#94c6da", 'palegreen3','gold','gray','cadetblue3','darkgreen'))+
+  scale_fill_lancet()+
+  facet_wrap(variable~.,scales = 'free')+
+  theme(axis.text.x=element_blank())+
+  theme_bw()+
+  theme(panel.border = element_rect(size = 1),
+        axis.text.y = element_text(size=8),
+        axis.text.x = element_text(size = 9,hjust = 1),
+        axis.title = element_text(size=14),
+        legend.key.size = unit(10, "mm"),
+        legend.text = element_text(size=10),
+        legend.title = element_blank(),
+        legend.position = 'right',
+        strip.background = element_rect(fill='gray92',size = 1),
+
+        strip.text = element_text(size = 10,face = 'bold'))+
+  labs(x='',y='')+
+  stat_compare_means()
+alpha_cm
+
+ggsave(alpha_cm, filename = 'alpha_cm_normal.tiff', device = 'tiff',width = 140,height = 100,units='mm',dpi=600)
