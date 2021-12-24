@@ -1,0 +1,18 @@
+pval_corr_pair<-function(pval,corr,rcutoff,vargroup){
+ 
+  corr <- melt(corr)
+  pval <- melt(pval)
+  
+  df <- cbind(corr,pval)
+  df <- df[,-c(4,5)]
+  df = df[which(df[,3]!=0),]
+  df = df[which(df[,4]<=0.05),]
+  df = df[which(abs(df[,3])>rcutoff),]
+  names(df)[2] <- 'index'
+  
+  if (!is.null(vargroup)) {
+    df <- merge(df,vargroup,by = 'index') 
+    df <- df[order(df[5]),]
+  }
+  return(df)
+}
