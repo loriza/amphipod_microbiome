@@ -1,13 +1,21 @@
-function(x,y){
-  #y = community div matrix
-  #x = variable dataframe
+ordered_adonis_each  =function(vardf,dist){
+ 
+  dist = mtg.dist78
+  data = merge(vardf,dist,by=0)
+  row.names(data) = data$Row.names
+  data = data[,-1]
+  x = data[,1:dim(vardf)[2]]
+  n=dim(vardf)[2]+1
+  y = data[,n:dim(data)[2]]
   data1 = matrix(rep(0,ncol(x)*3),ncol = 3)
   data1[,1] = colnames(x)
   colnames(data1) = c("name","R2","P")
+  library(vegan)
   for(i in 1:ncol(x)){
     a = adonis(y~x[,i], permutations = 9999) 
     data1[i,2] = a$aov.tab$R2[1]
     data1[i,3] = a$aov.tab$`Pr(>F)`[1]
   }
   return(data1)
+  
 }
