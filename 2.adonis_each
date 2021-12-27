@@ -1,6 +1,6 @@
 ordered_adonis_each  =function(vardf,dist){
  
-  dist = mtg.dist78
+ 
   data = merge(vardf,dist,by=0)
   row.names(data) = data$Row.names
   data = data[,-1]
