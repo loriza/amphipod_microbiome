@@ -20,15 +20,21 @@ TextFunc <- function(dat, col = "black", fontsize = 6, numdat = TRUE,
     }
   }}
 
-hm_corr <- function(corr,pval,anno,chosen_list,prefix,keyword,width,height){
-  s_corr <- corr[grep(keyword, names(corr), value=TRUE)] 
-  s_corr$id <- row.names(s_corr)
-  s_corr <- melt(s_corr) 
+hm_corr <- function(corr,pval,anno,chosen_list,prefix,keyword=NULL,width,height){
   
-  s_pval <- pval[grep(keyword, names(pval), value=TRUE)] 
+  if (!is.null(keyword)) { 
+    s_corr <- corr[grep(keyword, names(corr), value=TRUE)] 
+    s_pval <- pval[grep(keyword, names(pval), value=TRUE)] 
+  }
+  else{
+    s_corr <- corr
+    s_pval <- pval
+  }
+  
+  s_corr$id <- row.names(s_corr)
+  s_corr <- melt(s_corr)
   s_pval$id <- row.names(s_pval)
   s_pval <- melt(s_pval)
-  
   
   data <- cbind(s_corr,s_pval)
   data <- data[,-c(4,5)]
@@ -47,7 +53,17 @@ hm_corr <- function(corr,pval,anno,chosen_list,prefix,keyword,width,height){
     column_to_rownames(var = "id") %>% 
     as.matrix()
   
-  
+  TextFunc <- function(dat, col = "black", fontsize = 5, numdat = TRUE,
+                       digit = 2){
+    if(numdat == TRUE){
+      function(j, i, x, y, width, height, fill){
+        grid.text(round(dat, digit)[i, j], x, y, gp = gpar(fontsize = fontsize, col  = col))
+      }
+    }else{
+      function(j, i, x, y, width, height, fill){
+        grid.text(dat[i, j], x, y, gp = gpar(fontsize = fontsize, col  = col))
+      }
+    }}
   
   col_fun <- colorRamp2(breaks = c(-1, 0, 1), 
                         colors = c("#2b8cbe", "white", "#e41a1c"))
@@ -56,14 +72,14 @@ hm_corr <- function(corr,pval,anno,chosen_list,prefix,keyword,width,height){
   
   
   datCor.sorted  <- datCor[order(rownames(datCor)),]
-
+  
   anno <- data.frame(anno[chosen_list])
   names(anno)[1] <- 'group'
   anno$group <- as.factor(anno$group)
   print(anno)
   anno <- anno[match(rownames(datCor.sorted),rownames(anno)),]
-  row_anno <- HeatmapAnnotation(df=anno,which='row') 
- 
+  row_anno <- HeatmapAnnotation(group=anno,which='row') 
+  
   p1 <- Heatmap(datCor, name = "R2", col = col_fun,
                 rect_gp = gpar(col = "white", lwd = 1), 
                 right_annotation = row_anno,
@@ -74,11 +90,16 @@ hm_corr <- function(corr,pval,anno,chosen_list,prefix,keyword,width,height){
   textLeg <- Legend(labels = c("P < 0.05", "P < 0.01", "P < 0.001"), title = "Adj.P.value", type = "points", 
                     pch = c("*", "**", "***"), legend_gp = gpar(col = "black"), background = "white")
   
-  pdf(paste0(prefix,"_",keyword,'.pdf'), width=width, height=height)
+  if (!is.null(keyword)) { 
+    pdf(paste0(prefix,"_",keyword,'.pdf'), width=width, height=height)
+  }
+  else{
+    pdf(paste0(prefix,'.pdf'), width=width, height=height)
+  }
+  
   draw(p1, merge_legend = TRUE, heatmap_legend_side = "right", 
        annotation_legend_side = "right", annotation_legend_list = textLeg)
   
   dev.off()
   
 }
-hm_corr(corr,pval,r3_dif_sp,1,'r3_ir','Simpson',9,8)
