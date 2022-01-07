@@ -1,10 +1,13 @@
 library(ComplexHeatmap)
 library(circlize)
+library(reshape2)
 corr = read.table('r3_sp_ir_corr.txt',row.names = 1,sep='\t',check.names = F,header = T) 
 corr = cont_clean(corr,0)
 pval = read.table('r3_sp_ir_pval.txt',row.names = 1,sep='\t',check.names = F,header = T)
 pval = cont_clean(pval,0)
 r3_dif_sp = read.delim('r3_dif_sp.txt')
+
+
 TextFunc <- function(dat, col = "black", fontsize = 6, numdat = TRUE,
                      digit = 2){
   if(numdat == TRUE){
@@ -16,8 +19,8 @@ TextFunc <- function(dat, col = "black", fontsize = 6, numdat = TRUE,
       grid.text(dat[i, j], x, y, gp = gpar(fontsize = fontsize, col  = col))
     }
   }}
-  
-hm_corr <- function(corr,pval,anno,keyword,width,height){
+
+hm_corr <- function(corr,pval,anno,chosen_list,prefix,keyword,width,height){
   s_corr <- corr[grep(keyword, names(corr), value=TRUE)] 
   s_corr$id <- row.names(s_corr)
   s_corr <- melt(s_corr) 
@@ -26,7 +29,7 @@ hm_corr <- function(corr,pval,anno,keyword,width,height){
   s_pval$id <- row.names(s_pval)
   s_pval <- melt(s_pval)
   
-    
+  
   data <- cbind(s_corr,s_pval)
   data <- data[,-c(4,5)]
   names(data)[3] <- 'r'
@@ -49,28 +52,33 @@ hm_corr <- function(corr,pval,anno,keyword,width,height){
   col_fun <- colorRamp2(breaks = c(-1, 0, 1), 
                         colors = c("#2b8cbe", "white", "#e41a1c"))
   #annotation
-  colors <- list(Group = c('0' = 'darkgreen', '1' = 'grey'))
+  #colors <- list(Group = c('0' = 'darkgreen', '1' = 'grey'))
   
- 
+  
   datCor.sorted  <- datCor[order(rownames(datCor)),]
-  
-  anno <- row_anno[match(rownames(datCor.sorted),rownames(anno)),]
+
+  anno <- data.frame(anno[chosen_list])
+  names(anno)[1] <- 'group'
+  anno$group <- as.factor(anno$group)
+  print(anno)
+  anno <- anno[match(rownames(datCor.sorted),rownames(anno)),]
   row_anno <- HeatmapAnnotation(df=anno,which='row') 
+ 
   p1 <- Heatmap(datCor, name = "R2", col = col_fun,
                 rect_gp = gpar(col = "white", lwd = 1), 
-                cell_fun = TextFunc(datP, numdat = F),
-                right_annotation = row_anno
-                )
+                right_annotation = row_anno,
+                cell_fun = TextFunc(datP, numdat = F)
+                
+  )
   
   textLeg <- Legend(labels = c("P < 0.05", "P < 0.01", "P < 0.001"), title = "Adj.P.value", type = "points", 
                     pch = c("*", "**", "***"), legend_gp = gpar(col = "black"), background = "white")
   
-  pdf(paste0("r3_sp_",keyword,'.pdf'), width=width, height=height)
+  pdf(paste0(prefix,"_",keyword,'.pdf'), width=width, height=height)
   draw(p1, merge_legend = TRUE, heatmap_legend_side = "right", 
        annotation_legend_side = "right", annotation_legend_list = textLeg)
   
   dev.off()
   
 }
-
-hm_corr(corr,pval,r3_dif_sp,'Simpson',9,8)
+hm_corr(corr,pval,r3_dif_sp,1,'r3_ir','Simpson',9,8)
