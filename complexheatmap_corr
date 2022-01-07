@@ -1,25 +1,16 @@
 library(ComplexHeatmap)
 library(circlize)
 library(reshape2)
-corr = read.table('r3_sp_ir_corr.txt',row.names = 1,sep='\t',check.names = F,header = T) 
+corr = read.table('r2_sp_phen_corr.txt',row.names = 1,sep='\t',check.names = F,header = T) 
 corr = cont_clean(corr,0)
-pval = read.table('r3_sp_ir_pval.txt',row.names = 1,sep='\t',check.names = F,header = T)
+pval = read.table('r2_sp_phen_pval.txt',row.names = 1,sep='\t',check.names = F,header = T)
 pval = cont_clean(pval,0)
-r3_dif_sp = read.delim('r3_dif_sp.txt')
+r2_dif_sp = read.delim('lefse_rehab2_list.txt',header = F,row.names = 1)
+hm_corr(corr = corr,pval = pval,prefix = 'r2_sp_phen',anno = r2_dif_sp,chosen_list = 1,
+        width = 30,height = 8)
 
 
-TextFunc <- function(dat, col = "black", fontsize = 6, numdat = TRUE, digit = 2){
-  if(numdat == TRUE){
-    function(j, i, x, y, width, height, fill){
-      grid.text(round(dat, digit)[i, j], x, y, gp = gpar(fontsize = fontsize, col  = col))
-    }
-  }else{
-    function(j, i, x, y, width, height, fill){
-      grid.text(dat[i, j], x, y, gp = gpar(fontsize = fontsize, col  = col))
-    }
-  }}
-
-hm_corr <- function(corr,pval,anno,chosen_list,prefix,keyword=NULL,width,height){
+hm_corr <- function(corr,pval,anno=NULL,chosen_list=NULL,prefix,keyword=NULL,width,height){
   
   if (!is.null(keyword)) { 
     s_corr <- corr[grep(keyword, names(corr), value=TRUE)] 
@@ -44,15 +35,17 @@ hm_corr <- function(corr,pval,anno,chosen_list,prefix,keyword=NULL,width,height)
     spread(key = variable, value = r) %>% 
     column_to_rownames(var = "id") %>%
     as.matrix()
+  print(datCor)
+  
   datP <- data %>% mutate(p = cut(x = p, 
                                   breaks = c(-Inf, 0.001, 0.01, 0.05, Inf),
                                   labels = c("***", "**","*", ""))) %>% 
-    select(id, variable, p) %>% 
+    dplyr::select(id, variable, p) %>% 
     spread(key = variable, value = p) %>% 
     column_to_rownames(var = "id") %>% 
     as.matrix()
-  
-  TextFunc <- function(dat, col = "black", fontsize = 5, numdat = TRUE,
+ 
+  TextFunc <- function(dat, col = "black", fontsize = 15, numdat = TRUE,
                        digit = 2){
     if(numdat == TRUE){
       function(j, i, x, y, width, height, fill){
@@ -71,20 +64,32 @@ hm_corr <- function(corr,pval,anno,chosen_list,prefix,keyword=NULL,width,height)
   
   
   datCor.sorted  <- datCor[order(rownames(datCor)),]
+  if (!is.null(chosen_list)) { 
+    anno <- data.frame(anno[chosen_list])
+    names(anno)[1] <- 'group'
+    anno$group <- as.factor(anno$group)
+    print(anno)
+    anno <- anno[match(rownames(datCor.sorted),rownames(anno)),]
+    row_anno <- HeatmapAnnotation(group=anno,which='row') 
+  }
   
-  anno <- data.frame(anno[chosen_list])
-  names(anno)[1] <- 'group'
-  anno$group <- as.factor(anno$group)
-  print(anno)
-  anno <- anno[match(rownames(datCor.sorted),rownames(anno)),]
-  row_anno <- HeatmapAnnotation(group=anno,which='row') 
   
-  p1 <- Heatmap(datCor, name = "R2", col = col_fun,
-                rect_gp = gpar(col = "white", lwd = 1), 
-                right_annotation = row_anno,
-                cell_fun = TextFunc(datP, numdat = F)
-                
-  )
+  if (!is.null(anno)) { 
+    p1 <- Heatmap(datCor, name = "R2", col = col_fun,
+                  rect_gp = gpar(col = "white", lwd = 1), 
+                  right_annotation = row_anno,
+                  cell_fun = TextFunc(datP, numdat = F)
+                  
+    )
+  }
+  else{
+    p1 <- Heatmap(datCor, name = "R2", col = col_fun,
+                  rect_gp = gpar(col = "white", lwd = 1), 
+                  cell_fun = TextFunc(datP, numdat = F)
+                  
+    )
+  }
+
   
   textLeg <- Legend(labels = c("P < 0.05", "P < 0.01", "P < 0.001"), title = "Adj.P.value", type = "points", 
                     pch = c("*", "**", "***"), legend_gp = gpar(col = "black"), background = "white")
