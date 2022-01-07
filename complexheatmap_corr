@@ -8,8 +8,7 @@ pval = cont_clean(pval,0)
 r3_dif_sp = read.delim('r3_dif_sp.txt')
 
 
-TextFunc <- function(dat, col = "black", fontsize = 6, numdat = TRUE,
-                     digit = 2){
+TextFunc <- function(dat, col = "black", fontsize = 6, numdat = TRUE, digit = 2){
   if(numdat == TRUE){
     function(j, i, x, y, width, height, fill){
       grid.text(round(dat, digit)[i, j], x, y, gp = gpar(fontsize = fontsize, col  = col))
