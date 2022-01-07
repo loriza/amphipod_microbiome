@@ -5,6 +5,18 @@ corr = cont_clean(corr,0)
 pval = read.table('r3_sp_ir_pval.txt',row.names = 1,sep='\t',check.names = F,header = T)
 pval = cont_clean(pval,0)
 r3_dif_sp = read.delim('r3_dif_sp.txt')
+TextFunc <- function(dat, col = "black", fontsize = 6, numdat = TRUE,
+                     digit = 2){
+  if(numdat == TRUE){
+    function(j, i, x, y, width, height, fill){
+      grid.text(round(dat, digit)[i, j], x, y, gp = gpar(fontsize = fontsize, col  = col))
+    }
+  }else{
+    function(j, i, x, y, width, height, fill){
+      grid.text(dat[i, j], x, y, gp = gpar(fontsize = fontsize, col  = col))
+    }
+  }}
+  
 hm_corr <- function(corr,pval,anno,keyword,width,height){
   s_corr <- corr[grep(keyword, names(corr), value=TRUE)] 
   s_corr$id <- row.names(s_corr)
