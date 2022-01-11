@@ -31,24 +31,19 @@ des <- function(mappingfile,cont,list_no){
  
 }
 
-merge_df <- function(mappingfile,cont,cutoff){
-  cont <- clean_data(cont,cutoff)
 
+kw_each <- function(mappingfile,cont,m,group_no){
+  
   cont$id <- row.names(cont)
   mappingfile$id <- row.names(mappingfile)
   cont <- merge(mappingfile,cont, by ='id')
   row.names(cont) <- cont$id
-  cont = cont[,-1]
-  return(cont)
-}
-
-
-kw_each <- function(df,m,group_no){
+  df = cont[,-1]
   #df - the output of 'merge_df'
   #x=varible df
   #y=mapping
   #m = no. of cat var
- 
+  glist = names(df)[group_no]
   names(df)[group_no] <- 'group'
   min = m+1
   x = df[,min:dim(df)[2]]
@@ -61,14 +56,14 @@ kw_each <- function(df,m,group_no){
   results <- list()
   library(broom)
   for(i in 1:ncol(x)){
-    print(paste((colnames(df)[i]), "~ group"))
-    df2 <- df %>% gather(key, value, -group) %>% 
+    print(paste((colnames(df)[i]), "~",glist))
+    df1 <- df %>% gather(key, value, -group) %>% 
       group_by(key) %>% 
       do(tidy(kruskal.test(x= .$value, g = .$group)))
   }
-  return(df2)
-  }
-  
+  return(df1)
+}
+
 
 inf_kw<-kw_each(a,2,2)
 
