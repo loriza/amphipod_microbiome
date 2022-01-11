@@ -64,8 +64,8 @@ hm_corr_filter <- function(corr,pval,anno=NULL,chosen_list=NULL,prefix,varlist=N
     s_corr <- subset_col(varlist,s_corr)
   }
   else{
-    s_corr <- corr
-    s_pval <- pval
+    s_corr <- s_corr
+    s_pval <- s_pval
   }
   if(!is.null(rowlist)) {
     
@@ -77,8 +77,8 @@ hm_corr_filter <- function(corr,pval,anno=NULL,chosen_list=NULL,prefix,varlist=N
     s_corr <- subset_row(rowlist,s_corr)
   }
   else{
-    s_corr <- corr
-    s_pval <- pval
+    s_corr <- s_corr
+    s_pval <- s_pval
   }
   
   print(dim(s_corr))
