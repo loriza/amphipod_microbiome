@@ -2,17 +2,19 @@ library(ComplexHeatmap)
 library(circlize)
 library(reshape2)
 library(tidyverse)
-x = lapply(corr, as.numeric) %>% as.data.frame()
-pval = read.table('r2_sp_ir82_0110_pval.txt',row.names = 1,sep='\t',check.names = F,header = T)
-corr = read.table('r2_sp_ir82_0110_corr.txt',row.names = 1,sep='\t',check.names = F,header = T) 
-list_ir = readLines('../../../phenotype/ir_filter_list.txt')
-phen_list = readLines('../../../phenotype/phen_list.txt')
-r2_dif_sp = read.delim('lefse_rehab2_list.txt',header = F,row.names = 1)
 
-lefse_res = read_delim('DIS_SP/rehab2_res.txt') %>% as.data.frame()
+dir1 = 'r2_sp_phen_0110_pval.txt'
+dir2 = 'r2_sp_phen_0110_corr.txt'
+c_list_dir = '../../../phenotype/phen_list.txt'
+anno_dir = 'lefse_rehab2_list.txt'
+pval = read.table(dir1,row.names = 1,sep='\t',check.names = F,header = T)
+corr = read.table(dir2,row.names = 1,sep='\t',check.names = F,header = T) 
+varlist = readLines(c_list_dir)
+#phen_list = readLines('../../../phenotype/phen_list.txt')
+annot = read.delim(anno_dir,header = F,row.names = 1)
+
+lefse_res = read_delim('rehab2_res.txt') %>% as.data.frame()
 lefse_list = lefse_list(lefse_res,2.5)
-varlist
-varlist = list_ir
 
 corr = subset_col(varlist,corr)
 corr = subset_row(lefse_list,corr)
@@ -20,8 +22,9 @@ corr = cont_clean(corr,0)
 pval = subset_col(varlist,pval)
 pval = subset_row(lefse_list,pval)
 pval = cont_clean(pval,0)
-hm_corr_filter(corr = corr,pval = pval,prefix = 'r2_sp_ir_filter1',anno = r2_dif_sp,chosen_list = 1,
-        width = 40,height = 12)
+hm_corr_filter(corr = corr,pval = pval,prefix = 'r2_sp_phen_filter3',
+               anno = annot,chosen_list = 1,rowlist = lefse_list,
+        width = 20,height = 12)
 
 
 lefse_list = function(df,thresh){
@@ -35,12 +38,14 @@ subset_col <- function(list,df){
   filtered_df<- df[ ,which((names(df) %in% list)==TRUE)]
   return(filtered_df)
 }
-subset_row <- function(featurelist,df){
+subset_row <- function(list,df){
   filtered_df <- df[which((row.names(df) %in% list)==TRUE),]
   return(filtered_df)
 }
 
-hm_corr_filter <- function(corr,pval,anno=NULL,chosen_list=NULL,prefix,keyword=NULL,width,height){
+
+
+hm_corr_filter <- function(corr,pval,anno=NULL,chosen_list=NULL,prefix,varlist=NULL,rowlist=NULL,keyword=NULL,width,height){
   
   if (!is.null(keyword)) { 
     s_corr <- corr[grep(keyword, names(corr), value=TRUE)] 
@@ -50,7 +55,34 @@ hm_corr_filter <- function(corr,pval,anno=NULL,chosen_list=NULL,prefix,keyword=N
     s_corr <- corr
     s_pval <- pval
   }
+  if(!is.null(varlist)) {
+    
+    subset_col <- function(list,df){
+      filtered_df<- df[ ,which((names(df) %in% list)==TRUE)]
+      return(filtered_df)
+    }
+    s_pval <- subset_col(varlist,s_pval)
+    s_corr <- subset_col(varlist,s_corr)
+  }
+  else{
+    s_corr <- corr
+    s_pval <- pval
+  }
+  if(!is.null(rowlist)) {
+    
+    subset_row <- function(list,df){
+      filtered_df <- df[which((row.names(df) %in% list)==TRUE),]
+      return(filtered_df)
+    }
+    s_pval <- subset_row(rowlist,s_pval)
+    s_corr <- subset_row(rowlist,s_corr)
+  }
+  else{
+    s_corr <- corr
+    s_pval <- pval
+  }
   
+  print(dim(s_corr))
   s_corr$id <- row.names(s_corr)
   s_corr <- melt(s_corr)
   s_pval$id <- row.names(s_pval)
@@ -104,10 +136,6 @@ hm_corr_filter <- function(corr,pval,anno=NULL,chosen_list=NULL,prefix,keyword=N
     anno$group <- as.factor(anno$group)
     
     anno <- anno[match(rownames(datCor.sorted),rownames(anno)),]
-    anno_col <- colorRamp2(
-      c(0, 5, 10), 
-      c("#ff7f00", "white", "#1f78b4")
-    )
     
     row_anno <- HeatmapAnnotation(group=anno,which='row') 
   }
