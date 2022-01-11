@@ -3,8 +3,8 @@ library(circlize)
 library(reshape2)
 library(tidyverse)
 
-dir1 = 'r2_sp_phen_0110_corr.txt'
-dir2 = 'r2_sp_phen_0110_pval.txt'
+dir1 = 'phen_ir_corr.txt'
+dir2 = 'phen_ir_pval.txt'
 c_list_dir = '../../../phenotype/phen_filter_list.txt'
 anno_dir = 'lefse_rehab2_list.txt'
 corr = read.table(dir1,row.names = 1,sep='\t',check.names = F,header = T) 
@@ -19,11 +19,11 @@ lefse_list = lefse_filt(lefse_res,3)
 
 corr = cont_clean(corr,0)
 pval = cont_clean(pval,0)
-hm_corr_filter(corr = corr,pval = pval,prefix = 'sp_phen_immu_loglda3',
-              # keyword = 'Shannon',
-               anno = annot,chosen_list = 1,varlist = varlist,rowlist = lefse_list,
-             
-              width = 12,height = 8)
+hm_corr_filter(corr = corr,pval = pval,prefix = 'ir_phen_immu_loglda3',
+               keyword = 'Shannon',
+              chosen_list = 1,rowlist = varlist,
+              row_filt_na = FALSE,
+              width = 12,height = 15)
 
 
 lefse_filt = function(df,thresh){
@@ -33,18 +33,13 @@ lefse_filt = function(df,thresh){
   return(filtered_list)
 }
 
-cont_clean <- function(x,nancutoff){
-  a = rownames(x)
-  x = lapply(x, as.numeric) %>% as.data.frame()
-  row.names(x) <- a
-  #drop those with missing value over cutoff
-  if (!is.null(nancutoff)) {
-    x <- x[,!apply(x,2,function(y){sum(is.na(y))/nrow(x)>nancutoff})]
-    for(i in 1:ncol(x)){
-      x[,i][which(is.na(x[,i]))] = mean(x[,i],na.rm = T)
-    }
-    return(x)
-  }
+subset_col <- function(list,df){
+  filtered_df<- df[ ,which((names(df) %in% list)==TRUE)]
+  return(filtered_df)
+}
+subset_row <- function(list,df){
+  filtered_df <- df[which((row.names(df) %in% list)==TRUE),]
+  return(filtered_df)
 }
 
 hm_corr_filter <- function(corr,pval,prefix,width,height,anno=NULL,chosen_list=NULL,varlist=NULL,rowlist=NULL,keyword=NULL,col_filt_na=TRUE,row_filt_na = TRUE){
@@ -120,8 +115,7 @@ hm_corr_filter <- function(corr,pval,prefix,width,height,anno=NULL,chosen_list=N
   
   datP[is.na(datP)] <- " "
  
-  TextFunc <- function(dat, col = "black", fontsize = 15, numdat = TRUE,
-                       digit = 2){
+  TextFunc <- function(dat, col = "black", fontsize = 15, numdat = TRUE,digit = 2){
     if(numdat == TRUE){
       function(j, i, x, y, width, height, fill){
         grid.text(round(dat, digit)[i, j], x, y, gp = gpar(fontsize = fontsize, col  = col))
@@ -136,7 +130,17 @@ hm_corr_filter <- function(corr,pval,prefix,width,height,anno=NULL,chosen_list=N
                         colors = c("#2b8cbe", "white", "#e41a1c"))
  
   datCor.sorted  <- datCor[order(rownames(datCor)),]
-  if (!is.null(chosen_list)) { 
+  if (!is.null(keyword)) { 
+    pdf(paste0(prefix,"_",keyword,'.pdf'), width=width, height=height)
+  }
+  else{
+    pdf(paste0(prefix,'.pdf'), width=width, height=height)
+  }
+  textLeg <- Legend(labels = c("P < 0.05", "P < 0.01", "P < 0.001"), title = "P.value", type = "points", 
+                    pch = c("*", "**", "***"), legend_gp = gpar(col = "black"), background = "white")
+  
+ 
+  if (!is.null(anno)) { 
     anno <- data.frame(anno[chosen_list])
     names(anno)[1] <- 'group'
     anno$group <- as.factor(anno$group)
@@ -144,39 +148,21 @@ hm_corr_filter <- function(corr,pval,prefix,width,height,anno=NULL,chosen_list=N
     anno <- anno[match(rownames(datCor.sorted),rownames(anno)),]
     
     row_anno <- HeatmapAnnotation(group=anno,which='row') 
-  }
-  
-  
-  if (!is.null(anno)) { 
+    
     p1 <- Heatmap(datCor, name = "R2", col = col_fun,
                   rect_gp = gpar(col = "white", lwd = 1), 
                   right_annotation = row_anno,
-                  cell_fun = TextFunc(datP, numdat = F)
-                  
-    )
+                  cell_fun = TextFunc(datP, numdat = F))
+    draw(p1, merge_legend = TRUE, heatmap_legend_side = "right", 
+         annotation_legend_side = "right", annotation_legend_list = textLeg)
   }
   else{
     p1 <- Heatmap(datCor, name = "R2", col = col_fun,
                   rect_gp = gpar(col = "white", lwd = 1), 
                   cell_fun = TextFunc(datP, numdat = F)
-                  
-    )
+                  )
+    draw(p1, merge_legend = TRUE, heatmap_legend_side = "right")
   }
-
-  
-  textLeg <- Legend(labels = c("P < 0.05", "P < 0.01", "P < 0.001"), title = "P.value", type = "points", 
-                    pch = c("*", "**", "***"), legend_gp = gpar(col = "black"), background = "white")
-  
-  if (!is.null(keyword)) { 
-    pdf(paste0(prefix,"_",keyword,'.pdf'), width=width, height=height)
-  }
-  else{
-    pdf(paste0(prefix,'.pdf'), width=width, height=height)
-  }
-  
-  draw(p1, merge_legend = TRUE, heatmap_legend_side = "right", 
-       annotation_legend_side = "right", annotation_legend_list = textLeg)
-  
   dev.off()
   print(dim(datCor))
 }
