@@ -3,32 +3,32 @@ library(circlize)
 library(reshape2)
 library(tidyverse)
 
-dir1 = 'r2_sp_phen_0110_pval.txt'
-dir2 = 'r2_sp_phen_0110_corr.txt'
-c_list_dir = '../../../phenotype/phen_list.txt'
+dir1 = 'r2_sp_phen_0110_corr.txt'
+dir2 = 'r2_sp_phen_0110_pval.txt'
+c_list_dir = '../../../phenotype/phen_filter_list.txt'
 anno_dir = 'lefse_rehab2_list.txt'
-pval = read.table(dir1,row.names = 1,sep='\t',check.names = F,header = T)
-corr = read.table(dir2,row.names = 1,sep='\t',check.names = F,header = T) 
+corr = read.table(dir1,row.names = 1,sep='\t',check.names = F,header = T) 
+pval = read.table(dir2,row.names = 1,sep='\t',check.names = F,header = T)
 varlist = readLines(c_list_dir)
+#phen_list = readLines('../../../phenotype/phen_list.txt')
 annot = read.delim(anno_dir,header = F,row.names = 1)
 
-lefse_res = read_delim('rehab2_res.txt') %>% as.data.frame()
-lefse_list = lefse_list(lefse_res,2.5)
+lefse_res = read_delim('DIS_SP/rehab2_res.txt') %>% as.data.frame()
+lefse_list = lefse_filt(lefse_res,3)
 
-corr = subset_col(varlist,corr)
-corr = subset_row(lefse_list,corr)
+
 corr = cont_clean(corr,0)
-pval = subset_col(varlist,pval)
-pval = subset_row(lefse_list,pval)
 pval = cont_clean(pval,0)
-hm_corr_filter(corr = corr,pval = pval,prefix = 'r2_sp_phen_filter3',
-               anno = annot,chosen_list = 1,rowlist = lefse_list,
-        width = 20,height = 12)
+hm_corr_filter(corr = corr,pval = pval,prefix = 'sp_phen_immu_loglda3',
+              # keyword = 'Shannon',
+               anno = annot,chosen_list = 1,varlist = varlist,rowlist = lefse_list,
+              row_filt_na = TRUE,
+              width = 12,height = 8)
 
 
-lefse_list = function(df,thresh){
+lefse_filt = function(df,thresh){
   row.names(lefse_res) = lefse_res$taxa
-  filtered_df = df[which(df[,4]>=thresh),]
+  filtered_df = df[which(df[,2]>=thresh),]
   filtered_list = filtered_df$taxa %>%as.character()
   return(filtered_list)
 }
@@ -42,9 +42,7 @@ subset_row <- function(list,df){
   return(filtered_df)
 }
 
-
-
-hm_corr_filter <- function(corr,pval,anno=NULL,chosen_list=NULL,prefix,varlist=NULL,rowlist=NULL,keyword=NULL,width,height){
+hm_corr_filter <- function(corr,pval,prefix,width,height,anno=NULL,chosen_list=NULL,varlist=NULL,rowlist=NULL,keyword=NULL,col_filt_na=TRUE,row_filt_na = TRUE){
   
   if (!is.null(keyword)) { 
     s_corr <- corr[grep(keyword, names(corr), value=TRUE)] 
@@ -82,10 +80,12 @@ hm_corr_filter <- function(corr,pval,anno=NULL,chosen_list=NULL,prefix,varlist=N
   }
   
   print(dim(s_corr))
+  s_corr = cont_clean(s_corr,0)
+  s_pval = cont_clean(s_pval,0)
   s_corr$id <- row.names(s_corr)
-  s_corr <- melt(s_corr)
+  s_corr <- reshape2::melt(s_corr)
   s_pval$id <- row.names(s_pval)
-  s_pval <- melt(s_pval)
+  s_pval <- reshape2::melt(s_pval)
   
   data <- cbind(s_corr,s_pval)
   data <- data[,-c(4,5)]
@@ -97,22 +97,37 @@ hm_corr_filter <- function(corr,pval,anno=NULL,chosen_list=NULL,prefix,varlist=N
     dplyr::select(id, variable, p) %>% 
     spread(key = variable, value = p) %>% 
     column_to_rownames(var = "id") %>% 
-    as.matrix()
-
-  datP <- apply(datP, 2, function(x) gsub("^$|^ $", NA, x))%>% 
-    as.matrix() %>% 
-    .[,!apply(is.na(.), 2, all)]%>%
-    .[!apply(is.na(.), 1, all),]
-  datP[is.na(datP)] <- " "
-
+    as.matrix() 
+  datP <- apply(datP, 2, function(x) gsub("^$|^ $", NA, x))
   
   datCor <- data %>% select(id:r) %>% 
     spread(key = variable, value = r) %>% 
     column_to_rownames(var = "id") %>%
     as.matrix()
   
-  datCor <- datCor[,(colnames(datCor)%in% colnames(datP))]%>%
-    .[(rownames(.) %in% rownames(datP)),]
+  
+  if (isTRUE(col_filt_na)){
+    datP <- datP %>% 
+    as.matrix() %>% 
+    .[,!apply(is.na(.), 2, all)]
+    datCor <- datCor[,(colnames(datCor)%in% colnames(datP))]
+  }
+  else{
+    datP <- datP
+    datCor <- datCor
+  }
+  
+  if (isTRUE(row_filt_na)){
+    datP <- datP %>% .[!apply(is.na(.), 1, all),]
+    datCor <- datCor %>% .[(rownames(.) %in% rownames(datP)),]
+  }
+  else{
+    datP <- datP
+    datCor <- datCor
+  }
+  
+  datP[is.na(datP)] <- " "
+ 
   TextFunc <- function(dat, col = "black", fontsize = 15, numdat = TRUE,
                        digit = 2){
     if(numdat == TRUE){
@@ -156,7 +171,6 @@ hm_corr_filter <- function(corr,pval,anno=NULL,chosen_list=NULL,prefix,varlist=N
     )
   }
 
-  
   textLeg <- Legend(labels = c("P < 0.05", "P < 0.01", "P < 0.001"), title = "P.value", type = "points", 
                     pch = c("*", "**", "***"), legend_gp = gpar(col = "black"), background = "white")
   
@@ -173,3 +187,5 @@ hm_corr_filter <- function(corr,pval,anno=NULL,chosen_list=NULL,prefix,varlist=N
   dev.off()
   print(dim(datCor))
 }
+
+
