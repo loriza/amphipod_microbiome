@@ -20,8 +20,8 @@ corr = cont_clean(corr,0)
 pval = subset_col(varlist,pval)
 pval = subset_row(lefse_list,pval)
 pval = cont_clean(pval,0)
-hm_corr_filter(corr = corr,pval = pval,prefix = 'r2_sp_ir_filter2',anno = r2_dif_sp,chosen_list = 1,
-        width = 18,height = 12)
+hm_corr_filter(corr = corr,pval = pval,prefix = 'r2_sp_ir_filter1',anno = r2_dif_sp,chosen_list = 1,
+        width = 40,height = 12)
 
 
 lefse_list = function(df,thresh){
@@ -60,9 +60,6 @@ hm_corr_filter <- function(corr,pval,anno=NULL,chosen_list=NULL,prefix,keyword=N
   data <- data[,-c(4,5)]
   names(data)[3] <- 'r'
   names(data)[4] <- 'p'
-  
-  
-  
   datP <- data %>% mutate(p = cut(x = p, 
                                   breaks = c(-Inf, 0.001, 0.01, 0.05, Inf),
                                   labels = c("***", "**","*", ''))) %>% 
@@ -72,16 +69,19 @@ hm_corr_filter <- function(corr,pval,anno=NULL,chosen_list=NULL,prefix,keyword=N
     as.matrix()
 
   datP <- apply(datP, 2, function(x) gsub("^$|^ $", NA, x))%>% 
-    as.matrix() %>% .[,!apply(is.na(.), 2, all)]
+    as.matrix() %>% 
+    .[,!apply(is.na(.), 2, all)]%>%
+    .[!apply(is.na(.), 1, all),]
   datP[is.na(datP)] <- " "
-    
+
   
   datCor <- data %>% select(id:r) %>% 
     spread(key = variable, value = r) %>% 
     column_to_rownames(var = "id") %>%
     as.matrix()
   
-  datCor <- datCor[,(colnames(datCor)%in% colnames(datP))]
+  datCor <- datCor[,(colnames(datCor)%in% colnames(datP))]%>%
+    .[(rownames(.) %in% rownames(datP)),]
   TextFunc <- function(dat, col = "black", fontsize = 15, numdat = TRUE,
                        digit = 2){
     if(numdat == TRUE){
@@ -96,17 +96,19 @@ hm_corr_filter <- function(corr,pval,anno=NULL,chosen_list=NULL,prefix,keyword=N
   
   col_fun <- colorRamp2(breaks = c(-1, 0, 1), 
                         colors = c("#2b8cbe", "white", "#e41a1c"))
-  #annotation
-  #colors <- list(Group = c('0' = 'darkgreen', '1' = 'grey'))
-  
-  
+ 
   datCor.sorted  <- datCor[order(rownames(datCor)),]
   if (!is.null(chosen_list)) { 
     anno <- data.frame(anno[chosen_list])
     names(anno)[1] <- 'group'
     anno$group <- as.factor(anno$group)
-    print(anno)
+    
     anno <- anno[match(rownames(datCor.sorted),rownames(anno)),]
+    anno_col <- colorRamp2(
+      c(0, 5, 10), 
+      c("#ff7f00", "white", "#1f78b4")
+    )
+    
     row_anno <- HeatmapAnnotation(group=anno,which='row') 
   }
   
@@ -142,5 +144,5 @@ hm_corr_filter <- function(corr,pval,anno=NULL,chosen_list=NULL,prefix,keyword=N
        annotation_legend_side = "right", annotation_legend_list = textLeg)
   
   dev.off()
-  
+  print(dim(datCor))
 }
