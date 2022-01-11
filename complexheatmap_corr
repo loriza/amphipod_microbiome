@@ -33,13 +33,18 @@ lefse_filt = function(df,thresh){
   return(filtered_list)
 }
 
-subset_col <- function(list,df){
-  filtered_df<- df[ ,which((names(df) %in% list)==TRUE)]
-  return(filtered_df)
-}
-subset_row <- function(list,df){
-  filtered_df <- df[which((row.names(df) %in% list)==TRUE),]
-  return(filtered_df)
+cont_clean <- function(x,nancutoff){
+  a = rownames(x)
+  x = lapply(x, as.numeric) %>% as.data.frame()
+  row.names(x) <- a
+  #drop those with missing value over cutoff
+  if (!is.null(nancutoff)) {
+    x <- x[,!apply(x,2,function(y){sum(is.na(y))/nrow(x)>nancutoff})]
+    for(i in 1:ncol(x)){
+      x[,i][which(is.na(x[,i]))] = mean(x[,i],na.rm = T)
+    }
+    return(x)
+  }
 }
 
 hm_corr_filter <- function(corr,pval,prefix,width,height,anno=NULL,chosen_list=NULL,varlist=NULL,rowlist=NULL,keyword=NULL,col_filt_na=TRUE,row_filt_na = TRUE){
