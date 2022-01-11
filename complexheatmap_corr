@@ -10,7 +10,6 @@ anno_dir = 'lefse_rehab2_list.txt'
 pval = read.table(dir1,row.names = 1,sep='\t',check.names = F,header = T)
 corr = read.table(dir2,row.names = 1,sep='\t',check.names = F,header = T) 
 varlist = readLines(c_list_dir)
-#phen_list = readLines('../../../phenotype/phen_list.txt')
 annot = read.delim(anno_dir,header = F,row.names = 1)
 
 lefse_res = read_delim('rehab2_res.txt') %>% as.data.frame()
