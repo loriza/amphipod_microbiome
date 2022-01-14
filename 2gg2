@@ -1,0 +1,604 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use utf8;
+use Getopt::Std;
+use Switch;
+
+#===============================================================================
+our (
+    $opt_i, $opt_o, $opt_p, $opt_c, $opt_m, $opt_f,
+    $opt_l, $opt_n, $opt_r, $opt_g, $opt_s, $opt_h
+);
+
+#===============================================================================
+my $Version = "2019.May21-17.40";
+my $Contact = "ZHOU Yuanjie (ZHOU YJ), libranjie\@gmail.com";
+
+#===============================================================================
+&usage if ( 0 == @ARGV );
+&usage unless ( getopts('i:o:p:c:m:f:n:r:g:lsh') );
+&usage if ( defined $opt_h );
+unless ( 0 == @ARGV ) {
+    &usage("with undefined options: @ARGV");
+}
+&usage("lack input profiling table with: -i") unless ( defined $opt_i );
+&usage("lack input phenotype with: -p")       unless ( defined $opt_p );
+&usage("lack output prefix with: -o")         unless ( defined $opt_o );
+
+#===============================================================================
+my (
+    $profile, $phenotype, $prefix,  $column,   $topest,  $method,
+    $format,  $label,     $arrange, $logscale, $symbols, $ggsci
+);
+$profile   = $opt_i;
+$phenotype = $opt_p;
+$column    = ( defined $opt_c ) ? $opt_c : 0;
+$prefix    = $opt_o;
+$method    = ( defined $opt_m ) ? lc($opt_m) : 0;
+$format    = ( defined $opt_f ) ? lc($opt_f) : "png";
+$label     = ( defined $opt_n ) ? $opt_n : "Species";
+$arrange   = ( defined $opt_r ) ? $opt_r : 0;
+$logscale  = ( defined $opt_l ) ? 1 : 0;
+$symbols   = ( defined $opt_s ) ? "..p.signif.." : "..p.format..";
+$ggsci     = ( defined $opt_g ) ? $opt_g : "Lancet";
+
+#===============================================================================
+my %Palette = (
+    "NPG"       => "nrc",
+    "AAAS"      => "default",
+    "NEJM"      => "default",
+    "Lancet"    => "lanonc",
+    "JAMA"      => "default",
+    "JCO"       => "default",
+    "UCSCGB"    => "default",
+    "D3"        => "category10",
+    "LocusZoom" => "default"
+);
+
+#===============================================================================
+my ( %subsample, $OT, $row, $col );
+&open_phenotype( $phenotype, \%subsample, \$arrange, \$column );
+open $OT, ">$prefix.dat" or die "write $prefix.dat $!\n";
+&open_profile( $profile, \%subsample, $OT, \$topest, \$row, \$col );
+close $OT;
+exit unless ($method);
+switch ($method) {
+    case 'barplot' {
+        &ggplot2barplot( $prefix, $topest, $arrange, $label, $column, $col,
+            $row );
+    }
+    case 'bothplot' {
+        &ggplot2barplot( $prefix, $topest, $arrange, $label, $column, $col,
+            $row );
+        &ggplot2boxplot( $prefix, $topest, $arrange, $label, $column, $col,
+            $row );
+        &ggplot2histogram( $prefix, $topest, $arrange, $label, $column, $col,
+            $row );
+    }
+    case 'boxplot' {
+        &ggplot2boxplot( $prefix, $topest, $arrange, $label, $column, $col,
+            $row );
+    }
+    case 'histogram' {
+        &ggplot2histogram( $prefix, $topest, $arrange, $label, $column, $col,
+            $row );
+    }
+    else {
+        &usage("method $method not defined");
+    }
+}
+
+#===============================================================================
+sub ggplot2histogram {
+    my ( $prefix, $topest, $arrange, $label, $column, $col, $row ) = @_;
+    my $height = $row + 1;
+    my $width  = 8;
+    open RR, ">$prefix.histogram.r" or die "write $prefix.histogram.r $!\n";
+    print RR <<R;
+library('ggplot2')
+library('RColorBrewer')
+library('ggsci')
+D <- read.table(file="$prefix.dat", head=T, sep='\t')
+R
+    switch ($format) {
+        case "pdf" {
+            print RR <<R;
+pdf("$prefix.histogram.pdf", width=$width, height=$height);
+#png("$prefix.histogram.png", width=$width, height=$height, units = "in", res=100);
+#svg("$prefix.histogram.svg", width=$width, height=$height);
+R
+        }
+        case "png" {
+            print RR <<R;
+#pdf("$prefix.histogram.pdf", width=$width, height=$height);
+png("$prefix.histogram.png", width=$width, height=$height, units = "in", res=100);
+#svg("$prefix.histogram.svg", width=$width, height=$height);
+R
+        }
+        case "svg" {
+            print RR <<R;
+#pdf("$prefix.histogram.pdf", width=$width, height=$height);
+#png("$prefix.histogram.png", width=$width, height=$height, units = "in", res=100);
+svg("$prefix.histogram.svg", width=$width, height=$height);
+R
+        }
+        else {
+            &usage("format $format not defined");
+        }
+    }
+    my $color_pal = "pal_" . lc($ggsci);
+    print RR <<R;
+a<-D[grep('$topest',D\$Species),]
+b<-a[order(a\$Abundance,decreasing = T),]
+#D\$Sample<-factor(D\$Sample,levels = b\$Sample)
+D\$Group<-factor(D\$Group,levels = c("$arrange"))
+#mypal = pal_npg("nrc", alpha = 0.7)(9)
+#mypal = pal_lancet("lanonc", alpha = 0.7)(9)
+mypal = $color_pal("$Palette{$ggsci}", alpha = 0.99)(9)
+mycolor = colorRampPalette(mypal)
+ggplot(D) +
+  geom_histogram(aes(x=Abundance, color=factor(Group), fill=factor(Group)),
+                 bins=80, position="identity", alpha=0.4)+
+R
+    if ($logscale) {
+        print RR <<R;
+  scale_x_log10() +
+R
+    }
+    print RR <<R;
+  #scale_x_discrete(expand=c(0.01,0)) +
+  #scale_y_continuous(expand = c(0.01,0.00)) +
+  #facet_grid(Species~., scales = "free", space = "free_x", switch = "y") +
+  facet_grid(Species~., scales = "free", space = "free_x" ) +
+  theme_classic() +
+  theme(
+      #panel.background=element_blank(),
+      #axis.line=element_line(
+      #                       colour="black",
+      #                       size = 1),
+      #legend.box.background=element_blank(),
+      #legend.box.background=element_blank(),
+      axis.title=element_text(
+                              family="Helvetica",
+                              face="bold",
+                              colour="black",
+                              size=16
+                              ),
+      axis.text=element_text(
+                             family="Helvetica",
+                             colour="black",
+                             size=14
+                             ),
+      #axis.text.x=element_blank(),
+      axis.text.x=element_text(
+      #                   angle=90,
+      #                   hjust=1,
+                         vjust=0.5
+                         ),
+      strip.text.y=element_text(
+                              family="Helvetica",
+                              colour="black",
+                              angle=0,
+                              hjust=0,
+                              size=12
+                              ),
+      strip.background=element_blank(),
+      legend.position="top",
+      legend.title=element_text(
+                                family="Helvetica",
+                                colour="black",
+                                size=16
+                                ),
+      legend.text=element_text(
+                               family="Helvetica",
+                               colour="black",
+                               size=14
+                               )
+       ) +
+  guides(fill = guide_legend("$column", nrow=1), color =F) +
+  #scale_fill_discrete(h = c(0, 360) + 270, breaks = rev(as.vector(unique(D\$Group)))) +
+  #scale_color_discrete(h = c(0, 360) + 270, breaks = rev(as.vector(unique(D\$Group)))) +
+  #scale_fill_brewer(palette='Paired', breaks = rev(as.vector(unique(D\$Group)))) +
+  scale_fill_manual(values = mycolor($row), breaks = rev(as.vector(unique(D\$Group)))) +
+  scale_color_manual(values = mycolor($row), breaks = rev(as.vector(unique(D\$Group)))) +
+  xlab('Abundance') +
+  ylab('Counts')
+  dev.off()
+R
+    close RR;
+    system("R -f $prefix.histogram.r 1>/dev/null");
+}
+
+#===============================================================================
+sub ggplot2barplot {
+    my ( $prefix, $topest, $arrange, $label, $column, $col, $row ) = @_;
+    my $height = 8;
+    my $width  = $col / 7 + 3;
+    open RR, ">$prefix.barplot.r" or die "write $prefix.barplot.r $!\n";
+    print RR <<R;
+library('ggplot2')
+library('RColorBrewer')
+library('ggsci')
+D <- read.table(file="$prefix.dat", head=T, sep='\t')
+R
+    switch ($format) {
+        case "pdf" {
+            print RR <<R;
+pdf("$prefix.barplot.pdf", width=$width, height=$height);
+#png("$prefix.barplot.png", width=$width, height=$height, units = "in", res=100);
+#svg("$prefix.barplot.svg", width=$width, height=$height);
+R
+        }
+        case "png" {
+            print RR <<R;
+#pdf("$prefix.barplot.pdf", width=$width, height=$height);
+png("$prefix.barplot.png", width=$width, height=$height, units = "in", res=100);
+#svg("$prefix.barplot.svg", width=$width, height=$height);
+R
+        }
+        case "svg" {
+            print RR <<R;
+#pdf("$prefix.barplot.pdf", width=$width, height=$height);
+#png("$prefix.barplot.png", width=$width, height=$height, units = "in", res=100);
+svg("$prefix.barplot.svg", width=$width, height=$height);
+R
+        }
+        else {
+            &usage("format $format not defined");
+        }
+    }
+    my $color_pal = "pal_" . lc($ggsci);
+    print RR <<R;
+a<-D[grep('$topest',D\$Species),]
+b<-a[order(a\$Abundance,decreasing = T),]
+#D\$Sample<-factor(D\$Sample,levels = b\$Sample)
+D\$Sample<-as.character(D\$Sample)
+D\$Group<-factor(D\$Group,levels = c("$arrange"))
+#mypal = pal_npg("nrc", alpha = 0.7)(9)
+#mypal = pal_lancet("lanonc", alpha = 0.7)(9)
+mypal = $color_pal("$Palette{$ggsci}", alpha = 0.99)(9)
+mycolor = colorRampPalette(mypal)
+ggplot(D) +
+  geom_bar(aes(x=Sample, y=Abundance, group=Sample, fill=factor(Species)),
+           stat="identity", width=1, color= "black") +
+  #scale_x_discrete(breaks=NULL,expand=c(0.01,0)) +
+  scale_x_discrete(expand=c(0,0)) +
+  scale_y_continuous(expand = c(0.00,0.00)) +
+  facet_grid(~Group, scales = "free", space = "free_x", switch = "x") +
+  theme_classic() +
+  theme(
+      #panel.background=element_blank(),
+      #axis.line=element_line(
+      #                       colour="black",
+      #                       size = 1),
+      #legend.box.background=element_blank(),
+      #legend.box.background=element_blank(),
+      axis.title=element_text(
+                              family="Helvetica",
+                              face="bold",
+                              colour="black",
+                              size=16
+                              ),
+      axis.text=element_text(
+                             family="Helvetica",
+                             colour="black",
+                             size=12
+                             ),
+      #axis.text.x=element_blank(),
+      axis.text.x=element_text(
+                         angle=90,
+                         hjust=1,
+                         vjust=0.5,
+                         size=10
+                         ),
+      strip.text=element_text(
+                              family="Helvetica",
+                              colour="black",
+                              angle=90,
+                              hjust=0,
+                              vjust=0.5,
+                              size=14
+                              ),
+      #strip.text.x=element_blank(),
+      #strip.background=element_blank(),
+      #legend.position=c(0.90,0.80),
+      legend.title=element_text(
+                                family="Helvetica",
+                                colour="black",
+                                size=16
+                                ),
+      legend.text=element_text(
+                               family="Helvetica",
+                               colour="black",
+                               size=14
+                               )
+       ) +
+  guides(fill = guide_legend("$label", ncol=1)) +
+  #scale_fill_discrete(h = c(0, 360) + 270, breaks = rev(as.vector(unique(D\$Species)))) +
+  #scale_fill_brewer(palette='Paired', breaks = rev(as.vector(unique(D\$Species)))) +
+  scale_fill_manual(values = mycolor($row), breaks = rev(as.vector(unique(D\$Species)))) +
+  xlab('') +
+  ylab('Abundance')
+  dev.off()
+R
+    close RR;
+    system("R -f $prefix.barplot.r 1>/dev/null");
+}
+
+#===============================================================================
+sub ggplot2boxplot {
+    my ( $prefix, $topest, $arrange, $label, $column, $col, $row ) = @_;
+    my @info   = split /,/, $arrange;
+    my $width  = $row * 0.2 * ( scalar @info ) + 0.2;
+    my $height = 8;
+    my $ncol =
+      ( ( $row * scalar @info ) > 9 )
+      ? 1 + int( ( ( $row * scalar @info ) - 10 ) / 6 )
+      : 1;
+    open RR, ">$prefix.boxplot.r"
+      or die "write $prefix.boxplot.r $!\n";
+    print RR <<R;
+library('ggplot2')
+library('RColorBrewer')
+library('gridExtra');
+library('ggsci')
+library('ggpubr');
+D <- read.table(file="$prefix.dat", head=T, sep='\t')
+R
+    switch ($format) {
+        case "pdf" {
+            print RR <<R;
+pdf("$prefix.boxplot.pdf", width=$width, height=$height);
+#png("$prefix.boxplot.png", width=$width, height=$height, units = "in", res=100);
+#svg("$prefix.boxplot.svg", width=$width, height=$height);
+R
+        }
+        case "png" {
+            print RR <<R;
+#pdf("$prefix.boxplot.pdf", width=$width, height=$height);
+png("$prefix.boxplot.png", width=$width, height=$height, units = "in", res=100);
+#svg("$prefix.boxplot.svg", width=$width, height=$height);
+R
+        }
+        case "svg" {
+            print RR <<R;
+#pdf("$prefix.boxplot.pdf", width=$width, height=$height);
+#png("$prefix.boxplot.png", width=$width, height=$height, units = "in", res=100);
+svg("$prefix.boxplot.svg", width=$width, height=$height);
+R
+        }
+        else {
+            &usage("format $format not defined");
+        }
+    }
+    my $color_pal = "pal_" . lc($ggsci);
+    print RR <<R;
+#mi<-as.character(unique(D\$Species))
+#or<-c()
+#for(x in 1:length(mi)){
+#  ave<-cbind(mi[x],median(D\$Abundance[grep(mi[x],D\$Species)]))
+#  or<-rbind(or,ave)
+#}
+#sp<-or[order(or[,2],decreasing = T),][,1]
+#D\$Species<-factor(D\$Species,levels = sp)
+#mypal = pal_npg("nrc", alpha = 0.7)(9)
+mypal = $color_pal("$Palette{$ggsci}", alpha = 0.99)(9)
+mycolor = colorRampPalette(mypal)
+D\$Species<-factor(D\$Species,levels = unique(D\$Species))
+D\$Group<-factor(D\$Group,levels = c("$arrange"))
+ggplot(data = D,
+       aes(x=Group,
+           y=Abundance)) +
+  #geom_violin(draw_quantiles = c(0.25, 0.5, 0.75), size = 2) +
+  #geom_boxplot(varwidth = TRUE) +
+  #geom_jitter(aes(color=Species), shape = 1, width = 0.3, size = 2, alpha = 0.4) +
+  geom_jitter(shape = 1, width = 0.3, size = 2, alpha = 0.3) +
+  geom_boxplot(aes(fill=as.factor(Group)), size = 0.5, outlier.size = 0.1, outlier.alpha=0, alpha = 0.99) +
+  facet_grid(~Species, scales = "free", space = "free_x", switch = 'x') +
+  #stat_compare_means(aes(group=Group, label=$symbols), size = 10, geom = "text", hide.ns=TRUE) +
+R
+    if ($logscale) {
+        print RR <<R;
+  stat_compare_means(aes(label=$symbols)) +
+  scale_y_log10() +
+R
+    }
+    else {
+        print RR <<R;
+  stat_compare_means(aes(label=$symbols), label.y=1.03) +
+  scale_y_continuous(expand = c(0,0.02)) +
+R
+    }
+    print RR <<R;
+  #stat_summary(fun.y = 'mean', geom ='point', shape = 3, size = 4, color = 'red', stroke = 1)+
+  theme_classic() +
+  theme(
+      #panel.background=element_blank(),
+      #axis.line=element_line(
+      #                       colour="black",
+      #                       size = 1),
+      #legend.box.background=element_blank(),
+      #legend.box.background=element_blank(),
+      axis.title=element_text(
+                              family="Helvetica",
+                              face="bold",
+                              colour="black",
+                              size=16
+                              ),
+      axis.text=element_text(
+                             family="Helvetica",
+                             colour="black",
+                             size=14
+                             ),
+      axis.line.x=element_blank(),
+      axis.ticks.x=element_blank(),
+      axis.text.x=element_blank(),
+      #axis.text.x=element_text(
+      #                         angle=45
+      #                         ),
+      strip.text=element_text(
+                              family="Helvetica",
+                              colour="black",
+                              angle=90,
+                              vjust=0.5,
+                              hjust=0,
+                              size=14
+                              ),
+      panel.border=element_rect(
+                                fill=NA,
+      #                         colour="black",
+                                size=0.5
+                                ),
+      #strip.text.x=element_blank(),
+      strip.background=element_blank(),
+      legend.position="top",
+      #legend.position=c(0.08,0.94),
+      legend.title=element_text(
+                                family="Helvetica",
+                                colour="black",
+                                size=16
+                                ),
+      legend.text=element_text(
+                               family="Helvetica",
+                               colour="black",
+                               size=12
+                               )
+       ) +
+  guides(fill = guide_legend("$column",ncol=$ncol), color = F) +
+  #scale_color_discrete(breaks = rev(as.vector(unique(D\$Species)))) +
+  #scale_color_brewer(palette='Paired', breaks = rev(as.vector(unique(D\$Species)))) +
+  scale_color_manual(values = mycolor($row), breaks = rev(as.vector(unique(D\$Species)))) +
+  #scale_color_lancet(breaks = rev(as.vector(unique(D\$Species)))) +
+  xlab('') +
+  ylab('Abundance')
+  dev.off()
+R
+    close RR;
+    system("R -f $prefix.boxplot.r 1>/dev/null");
+}
+
+#===============================================================================
+sub open_profile {
+    my ( $profile, $subsample, $OT, $topest, $row, $col ) = @_;
+    my ( @info, @title, @column, $hcolumn, $rcolumn, $i );
+    if ( $profile =~ /\.gz/ ) {
+        open PR, "gzip -dc $profile" or die "gzip -dc $profile $!\n";
+    }
+    else {
+        open PR, "<$profile" or die "read $profile $!\n";
+    }
+    chomp( $_ = <PR> );
+    chomp( $_ = <PR> ) if ( $_ =~ /^# Constructed from biom file/ );
+    @title   = split /\t/;
+    $hcolumn = scalar @title;
+    &usage("table is not '\\t' as separate") if ( 1 eq $hcolumn );
+    for ( $i = 1 ; $i < @title ; ++$i ) {
+        push( @column, $i ) if ( defined $subsample{ $title[$i] } );
+    }
+    &usage("unmatched sample name between profile and phenotype")
+      if ( 2 > scalar @column );
+    $$col = scalar @column;
+    print $OT "Species\tSample\tAbundance\tGroup\n";
+    $$row    = 0;
+    $$topest = 0;
+    while (<PR>) {
+        chomp;
+        next if (/^#/);
+        ++$$row;
+        @info    = split /\t/;
+        $rcolumn = scalar @info;
+        &usage(
+"data row $$row do not match head's columns: $rcolumn\t$hcolumn\n$_\n"
+        ) if ( $hcolumn ne $rcolumn );
+        $$topest = ($$topest) ? $$topest : $info[0];
+        foreach $i (@column) {
+            print $OT $info[0], "\t", $title[$i], "\t", $info[$i], "\t",
+              $subsample{ $title[$i] }, "\n";
+        }
+    }
+    close PR;
+}
+
+#===============================================================================
+sub open_phenotype {
+    my ( $phenotype, $subsample, $arrange, $column ) = @_;
+    my ( @info, %type, $head, $col, $i );
+    open LS, "<$phenotype" or die "read $phenotype $!\n";
+    chomp( $head = <LS> );
+    @info = split /\t/, $head;
+    unless ($$column) {
+        $col     = 1;
+        $$column = "Group";
+    }
+    else {
+        for ( $i = 1 ; $i < @info ; ++$i ) {
+            if ( $info[$i] eq $$column ) {
+                $col = $i;
+                last;
+            }
+        }
+        unless ($col) {
+            &usage(
+                "column title for barplot/boxplot not matched: $$column \n$head"
+            );
+        }
+    }
+    while (<LS>) {
+        chomp;
+        next if (/^#/);
+        @info = split /\t/;
+        $subsample->{ $info[0] } = $info[$col];
+        ++$type{ $info[$col] };
+    }
+    if ($$arrange) {
+        @info = split /,/, $$arrange;
+        &usage("unmatched arrange with types in phenotype file")
+          if ( scalar @info ne scalar keys %type );
+    }
+    else {
+        @info = sort keys %type;
+    }
+    $$arrange = join "\",\"", @info;
+    close LS;
+}
+
+#===============================================================================
+sub usage {
+    my ($reason) = @_;
+    print STDERR "
+  ==============================================================================
+  $reason
+  ==============================================================================
+  " if ( defined $reason );
+    print STDERR "
+  Last modify: $Version
+  Contact: $Contact
+
+  Usage:
+  \$perl $0 [options]
+  -i    --profile   input profile table, required
+  -p    --phenotype input phenotype list, required
+  -c    --column    column title for phenotype file, default 2nd column
+  -o    --result    output result .dat, default STDOUT
+  -m    --ggplot    boxplot|barplot|histogram|bothplot
+  -f    --format    image format (png|pdf|svg),  default png
+  -l    --logscale  logscale for boxplot/histogram, default not
+  -n    --label     name of the y label for profile levels, default Species
+                    e.g. ASVs|Species|Genus|Family|Order|Class|Phylum
+  -g    --ggsci     color palette with R-ggsci, default Lancet
+                    NPG|AAAS|NEJM|Lancet|JAMA|JCO|UCSCGB|D3|LocusZoom
+  -r    --arrange   point group arrangement, connected by ',', default ASCII
+  -s    --symbols   symbols of significance, default p-value
+                    • ‘ns’: p > 0.05
+                    • ‘*’: p <= 0.05
+                    • ‘**’: p <= 0.01
+                    • ‘***’: p <= 0.001
+                    • ‘****’: p <= 0.0001
+  -h    --help
+  \n";
+    exit;
+}
+
+#===============================================================================
