@@ -1,22 +1,5 @@
 #!/usr/bin/perl
-#===============================================================================
-#
-#         FILE: profile2LEFSe.pl
-#
-#        USAGE: ./profile2LEFSe.pl
-#
-#  DESCRIPTION:
-#
-#      OPTIONS: ---
-# REQUIREMENTS: ---
-#         BUGS: ---
-#        NOTES: ---
-#       AUTHOR: ZHOU Yuanjie (ZHOU YJ), libranjie@aliyun.com
-# ORGANIZATION: R & D Department
-#      VERSION: 1.0
-#      CREATED: Sun May 21 22:03:33 2017 CST
-#     REVISION: ---
-#===============================================================================
+
 use strict;
 use warnings;
 use utf8;
