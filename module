@@ -1,0 +1,40 @@
+module_ko <- read.table('rehab/module_ko.txt',row.names = 1,header = T)
+ko_t <- ko %>% t() %>% as.data.frame()
+
+for(i in 1:nrow(module_ko)){
+  
+  t <- strsplit(module_ko[i,1],",") %>% unlist()
+  o <- ko_t[which((rownames(ko_t) %in% t)==TRUE),] %>%
+    summarise(across(everything(), ~ sum(., is.na(.), 0)))
+  row.names(o) <- row.names(module_ko)[i]
+  if (i>1) {
+    df <- rbind(df,o)
+  }
+  else{
+    df <- o
+  }
+  
+}
+
+module = df
+save_table(module)
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+BiocManager::install("KEGGREST")
+
+
+library(KEGGREST)
+
+
+mod <- keggList("module")
+obj<-lapply(names(mod),function(x)
+{
+  module<-strsplit(x,"md:")[[1]][2]
+  ko<-keggGet(x)
+
+  orthologs<-paste(names(ko[[1]]$ORTHOLOGY),collapse = ",")
+  list(module,orthologs)
+})
+
+mod_df <- as.data.frame(mod)
+save_table(mod_df)
