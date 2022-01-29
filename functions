@@ -1,0 +1,594 @@
+var_des <- function(mappingfile,cont,list_no){
+  
+  a = row.names(mappingfile)
+  mappingfile = as.data.frame(mappingfile[,list_no])
+  names(mappingfile)[1]<- 'group'
+  row.names(mappingfile) <- a
+  
+  cont$id <- row.names(cont)
+  mappingfile$id <- row.names(mappingfile)
+  cont <- merge(mappingfile,cont, by ='id')
+  row.names(cont) <- cont$id
+  h = cont[,-1] %>% melt()
+  normal.des <- doBy::summaryBy(value ~ variable+group, data = h, FUN = c(mean,median,sd,max))
+  
+}
+kw_loop <- function(mapping,cont,chosen_list){
+  
+  library(tidyverse)
+  mapping <- mapping[chosen_list] %>% as.data.frame()
+  cn <- names(mapping)
+  names(mapping) <- 'group'
+  cont <- merge(mapping,cont, by =0)
+  row.names(cont) <- cont$Row.names
+  df = cont[,-1]
+  results <- list()
+  library(broom)
+  for(i in 1:ncol(df)){
+    print(paste((colnames(df)[i]), "~",cn))
+    df1 <- df %>% gather(key, value, -group) %>% 
+      group_by(key) %>% 
+      do(tidy(kruskal.test(x= .$value, g = .$group)))
+  }
+  #return(df1)
+  k = df1[which(df1[,3]<=0.05),]
+  names(k)[1] = 'variable'
+  
+  aa = cont[,-1]
+  
+  aa=melt(aa)
+  aa = merge(aa,k,by='variable')
+  
+  
+  aa$group = as.factor(aa$group)
+  library(ggsci)
+  library(ggpubr)
+  pp =ggplot(aa, aes(group,value))+
+    geom_boxplot(aes(fill=group),alpha = 0.6,lwd=1,width =0.5)+
+    #scale_fill_manual(values = c("#f3a583","#94c6da", 'palegreen3','gold','gray','cadetblue3','darkgreen'))+
+    scale_fill_lancet()+
+    facet_wrap(variable~., scales="free",nrow=6)+
+    theme(axis.text.x=element_blank())+
+    theme_bw()+
+    theme(panel.border = element_rect(size = 1),
+          axis.text.y = element_text(size=8),
+          axis.text.x = element_text(size = 9,hjust = 1),
+          axis.title = element_text(size=14),
+          legend.key.size = unit(10, "mm"),
+          legend.text = element_text(size=10),
+          legend.title = element_blank(),
+          legend.position = 'right',
+          strip.background = element_rect(fill='gray92',size = 1),
+          strip.text = element_text(size = 10,face = 'bold'))+
+    labs(x='',y='',fill='group')+
+    stat_compare_means()
+  pp
+  ggsave("kk.png", plot=pp, device="png",
+         width=450, height=400, units="mm", dpi=500)
+  
+  
+}
+chi_sq_loop <- function(mapping,cat,chosen_list){
+  
+  
+  mapping <- mapping[chosen_list] %>% as.data.frame()
+  cn <- names(mapping)
+  names(mapping)[1] <- 'group'
+  cat <- merge(mapping,cat, by =0)
+  row.names(cat) <- cat$Row.names
+  df <- cat[,-1]
+  library(broom)
+  for(i in 2:ncol(df)){
+    print(paste((colnames(df)[i]), "~",cn))
+    df2 <- df %>% gather(key, value, -group) %>% 
+      group_by(key) %>% 
+      do(tidy(chisq.test(x= .$value, y = .$group)))
+  }
+  return(df2)
+}
+chisqmatrix <- function(x) {
+  names = colnames(x)
+  num = length(names)
+  m = matrix(nrow=num,ncol=num,dimnames=list(names,names))
+  for (i in 1:(num-1)) {
+    for (j in (i+1):num) {
+      m[i,j] = chisq.test(x[,i],x[,j],)$p.value
+    }
+  }
+  return (m)
+}
+
+ordered_anosim <- function(vardf,profile){
+  
+  data = merge(vardf,profile,by=0)
+  row.names(data) = data$Row.names
+  data = data[,-1]
+  x = data[,1:dim(vardf)[2]]
+  
+  #x= vardf
+  #y= d
+  n=dim(vardf)[2]+1
+  y = data[,n:dim(data)[2]]
+  dist = vegan::vegdist(y) 
+  dist = as.matrix(dist)
+  
+  data1 = matrix(rep(0,ncol(x)*3),ncol = 3)
+  data1[,1] = colnames(x)
+  
+  colnames(data1) = c("name","R2","P")
+  library(vegan)
+  for(i in 1:ncol(x)){
+    a = anosim(x=dist,grouping=x[,i], permutations = 999) 
+    #print(a)
+    data1[i,2] = a$statistic
+    print(a$statistic)
+    data1[i,3] = a$signif
+  }
+  return(data1)
+  
+}
+ordered_adonis_each <-function(vardf,profile){
+  data = merge(vardf,profile,by=0)
+  row.names(data) = data$Row.names
+  data = data[,-1]
+  x = data[,1:dim(vardf)[2]]
+  
+  n=dim(vardf)[2]+1
+  y = data[,n:dim(data)[2]]
+  dist = vegan::vegdist(y) 
+  dist = as.matrix(dist)
+  
+  data1 = matrix(rep(0,ncol(x)*3),ncol = 3)
+  data1[,1] = colnames(x)
+  
+  colnames(data1) = c("name","R2","P")
+  library(vegan)
+  for(i in 1:ncol(x)){
+    a = adonis(dist~x[,i], permutations = 9999) 
+    data1[i,2] = a$aov.tab$R2[1]
+    data1[i,3] = a$aov.tab$`Pr(>F)`[1]
+  }
+  return(data1)
+  
+}
+ordered_mrpp_each <- function(vardf,profile){
+  
+  data = merge(vardf,profile,by=0)
+  row.names(data) = data$Row.names
+  data = data[,-1]
+  x = data[,1:dim(vardf)[2]]
+  
+  n=dim(vardf)[2]+1
+  y = data[,n:dim(data)[2]]
+  dist = vegan::vegdist(y) 
+  dist = as.matrix(dist)
+  
+  data1 = matrix(rep(0,ncol(x)*3),ncol = 3)
+  data1[,1] = colnames(x)
+  
+  colnames(data1) = c("name","R2","P")
+  
+  library(vegan)
+  for(i in 1:ncol(x)){
+    a = mrpp(dist, x[,i], permutations = 9999) 
+    data1[i,2] = a$delta
+    data1[i,3] = a$Pvalue
+  }
+  return(data1)
+  
+}
+
+
+nmds_plot <- function(metadata, profile,axis1,axis2,chosen_list) 
+{
+  dist = vegan::vegdist(profile)
+  nmds_object = vegan::metaMDS(dist)
+  chosenlist = names(metadata)[chosen_list]
+  
+  group = data.frame(metadata[chosen_list]) 
+  names(group)[1] <- "group"
+  kept_axes = paste0("MDS", c(axis1, axis2))
+  
+  nmds_df = as.data.frame(nmds_object$points)
+  
+  nmds_df$names <- rownames(nmds_df)
+  group$names<- rownames(group)
+  nmds_df <- merge(nmds_df, group, by="names")
+  
+  nmds_df$group = as.factor(nmds_df$group)
+  library(ggsci)
+  # Final plot
+  print(nmds_df)
+  nmds <- ggplot(nmds_df,aes_string(x = kept_axes[1],
+                                    y = kept_axes[2])) +
+    # Add dashed axes
+    #aes(color=grouping)+
+    geom_hline(yintercept = 0, linetype = 2, color = "gray") +
+    geom_vline(xintercept = 0, linetype = 2, color = "gray") +
+    # Add species points
+    geom_point(aes(color=group),alpha=0.7, size =4 ) +
+    #coord_fixed(xlim = x_lim, ylim = y_lim) +
+    
+    labs(x = "nMDS1",
+         y = "nMDS2",
+         color = chosenlist)+
+    
+    scale_color_lancet()+
+    #scale_shape_manual(values = c(19,17,15,16,25))+
+    annotate("text", label = paste("Stress =", round(nmds_object$stress, 4)), x = 0.0, y = 0.3, size = 3, colour = "black")+ 	#��עӦ������ֵ
+    ggtitle("")+
+    #stat_ellipse(level = 0.95, alpha = 0.6,linetype=2,size =1.0,geom = "path", show.legend = FALSE)
+    #guides(shape = F,colour = guide_legend(override.aes = list(shape = c(19,19,17)))) +
+    
+    theme_classic() +
+    theme(panel.grid = element_blank(),
+          legend.position = "right",
+          legend.title = element_text(size=12,face="bold"),
+          legend.text = element_text(size=12),
+          axis.title=element_text(size=12,face = "bold")
+    )
+  return(nmds)
+  
+}
+
+pca_plot <- function(metadata,profile, axis1, axis2, chosen_list_no){ 
+  pca_object = vegan::rda(profile,scale=T)
+  chosenlist = names(metadata)[chosen_list_no]
+  names(metadata)[chosen_list_no] <-'group'
+  # Store axes names
+  kept_axes = paste0("PC", c(axis1, axis2))
+  # data.frame with values from species
+  pca_df = as.data.frame(pca_object$CA$u)
+  
+  percent_var <- pca_object$CA$eig/pca_object$tot.chi
+  percent_var <- percent_var[c(axis1, axis2)]  
+  names(percent_var) = kept_axes
+  # Axes labels in plot
+  axes_labs = lapply(kept_axes, function(x) {
+    paste0(gsub(".", " ", x, fixed = TRUE),
+           " (", round(percent_var[x] * 100, 2), "%)")
+  }) 
+  
+  #merge  metadata
+  metadata$id = row.names(metadata)
+  pca_df$id = row.names(pca_df)
+  pca_df <- merge(pca_df,metadata,by = 'id')
+  pca_df$group = as.factor(pca_df$group)
+  print(dim(pca_df))
+  library(ggrepel)
+  ggplot(pca_df,aes_string(x = kept_axes[1],y = kept_axes[2])) +
+    geom_point(aes(color=group),size =4,alpha=.8 ) +
+    theme_classic()+
+    scale_color_lancet()+
+    labs(x = paste(axes_labs[[1]]),
+         y = paste(axes_labs[[2]]),
+         color = chosenlist)+
+    geom_text_repel(label=pca_df$id)
+  
+}
+
+pcoa_plot <- function(metadata,profile, axis1, axis2, chosen_list_no){ dist <- vegan::vegdist(profile)
+  pcoa_object <- ape::pcoa(dist)
+  chosenlist = names(metadata)[chosen_list_no]
+  names(metadata)[chosen_list_no] <-'group'
+  #metadata$group <- as.factor(metadata$group)
+  # Store axes names
+  kept_axes = paste0("Axis.", c(axis1, axis2))
+  
+  # data.frame with values from species
+  pcoa_df = as.data.frame(pcoa_object$vectors)
+  
+  # Eigen values per axes 
+  eigen_values = pcoa_object$values$Relative_eig[c(axis1, axis2)]
+  names(eigen_values) = kept_axes
+  
+  # Axes labels in plot
+  axes_labs = lapply(kept_axes, function(x) {
+    paste0(gsub(".", " ", x, fixed = TRUE),
+           " (", round(eigen_values[x] * 100, 2), "%)")
+  })
+  
+  #merge  metadata
+  pcoa_df$names <- rownames(pcoa_df)
+  metadata$names <- rownames(metadata)
+  
+  pcoa_df <- merge(pcoa_df, metadata,by ='names', all.x = T)
+  pcoa_df$group <- as.factor(pcoa_df$group)
+  row.names(pcoa_df) <- pcoa_df$names
+  pcoa_df = pcoa_df[,-1]
+  library(ggplot2)
+  library(ggsci)
+  given_pcoa_plot2 = ggplot(pcoa_df,aes_string(x = kept_axes[1],
+                                               y = kept_axes[2])
+  ) +
+    geom_point(aes(color=group),size =4,alpha=0.8) +
+    #stat_ellipse(aes(color=group))+
+    scale_color_lancet()+
+    labs(x = paste('PCoA',axes_labs[[1]]),
+         y = paste('PCoA',axes_labs[[2]]),
+         color = chosenlist)+
+    theme_classic() 
+  
+  return(given_pcoa_plot2)
+
+}
+umap_plot <- function(mapping,profile,chosen_list_no){ 
+  chosenlist <- names(mapping)[chosen_list_no]
+  mapping <- data.frame(mapping[chosen_list_no])
+  names(mapping)[1] <-'group'
+  library(uwot)
+  umap_plot <- umap(profile,n_neighbors = 10)
+  colnames(umap_plot) <- c('UMAP1','UMAP2') 
+  umap_plot <- as.data.frame(umap_plot)
+  umap_plot <- cbind(umap_plot,mapping)
+  umap_plot$group <- as.factor(umap_plot$group)
+  u <- ggplot(umap_plot, aes(x=UMAP1, y=UMAP2)) + 
+    geom_point(aes(color=group),size =4,alpha=.8 ) +
+    theme_classic()+
+    theme(legend.position = 'right')+
+    scale_color_lancet()+
+    labs(color=chosenlist)
+  
+  return(u)
+  
+}
+
+alpha_box <- function(mapping,profile,chosen_list){
+  library(vegan)
+  Richness <- rowSums(profile>0)
+  Shannon <- diversity(profile,index = 'shannon',base = exp(1))
+  alpha <- data.frame(Shannon,Richness) 
+  
+  g = mapping[chosen_list] %>% as.data.frame()
+  names(g)[1] <- 'group'
+  
+  alpha = merge(g,alpha,by=0)
+  
+  row.names(alpha) = alpha$Row.names
+  names(alpha)[1] = 'id'
+  
+  alpha$group = as.factor(alpha$group)
+  
+  
+  library(reshape2)
+  alpha_m = melt(alpha)
+  
+  library(ggsci)
+  library(ggpubr)
+  alpha_cm =ggplot(alpha_m, aes(group,value))+
+    geom_boxplot(aes(fill=group),alpha=0.6,lwd = 1.2,width = 0.5)+
+    #scale_fill_manual(values = c("#f3a583","#94c6da", 'palegreen3','gold','gray','cadetblue3','darkgreen'))+
+    scale_fill_lancet()+
+    facet_wrap(variable~.,scales = 'free')+
+    theme(axis.text.x=element_blank())+
+    theme_bw()+
+    theme(panel.border = element_rect(size = 1),
+          axis.text.y = element_text(size=8),
+          axis.text.x = element_text(size = 9,hjust = 1),
+          axis.title = element_text(size=14),
+          legend.key.size = unit(10, "mm"),
+          legend.text = element_text(size=10),
+          legend.title = element_blank(),
+          legend.position = 'right',
+          strip.background = element_rect(fill='gray92',size = 1),
+          
+          strip.text = element_text(size = 10,face = 'bold'))+
+    labs(x='',y='',alpha='')+
+    stat_compare_means()+
+    geom_signif(comparisons = combn(levels(alpha_m$group),2, simplify = F),step_increase = 0.2)
+  alpha_cm
+  
+  ggsave(alpha_cm, filename = 'alpha.png', device = 'tiff',width = 200,height = 100,units='mm',dpi=600)
+  
+}
+
+lm_2<-function (profile1,key1,profile2,key2){
+  kk <- profile1[grep(key1, names(profile1), value=TRUE)] 
+  p <- profile2[grep(key2,names(profile2),value = T)]
+  
+  kk = merge(kk,p,by=0)
+  
+  #names(kk)[2]<-'n'
+  #kk[kk==0] <- NA
+  #x= na.omit(kk)
+  x= kk
+  
+  row.names(x)=x$Row.names
+  x=x[,-1]
+  x=x[-42,]
+  print(x)
+  xaxis=names(x)[1]
+  yaxis=names(x)[2]
+  names(x)[1] <- 'x1'
+  names(x)[2] <- 'y1'
+  
+  print(cor(x,use="complete.obs",method='spearman'))
+  GGally::ggpairs(x)
+  ggplot2::ggplot(x,aes(x=x1,y=y1))+
+    geom_jitter(size=3, alpha=0.8) +
+    geom_smooth(color = "black",method='lm',formula=y~x, size = 1)+
+    
+    theme_classic()+
+    theme(axis.title = element_text(size = 16),
+          axis.text = element_text(size=10),
+          panel.grid.minor = element_blank(),
+          strip.background = element_blank(),
+          strip.text = element_text(size=14),
+          panel.border = element_rect(colour = "black", fill = NA))+
+    stat_cor(aes(label = paste(stat(r.label),stat(p.label),sep = "*\", \"*")),method = 'spearman',
+             label.y = 16,size = 4,p.accuracy = 0.001, r.accuracy = 0.001)+
+    labs(x=xaxis,y=yaxis)
+  
+}
+var_boxplot<-function(keyword,profile,mapping,chosen_list){
+  
+  mapping <- mapping[chosen_list] %>% as.data.frame()
+  names(mapping)[1] <- 'group'
+  kx <- profile[grep(keyword, names(profile), value=TRUE)] 
+  #kx$id = row.names(kx)
+  kx = merge(kx,mapping,by=0)
+  names(kx)[1] <- 'id'
+  kx = reshape2::melt(kx)
+  library(ggplot2)
+  library(ggpubr)
+  kx$group = as.factor(kx$group)
+  print(kx)
+  ggplot(kx, aes(group,value))+
+    geom_boxplot(aes(fill=group),lwd = 1.2,width = 0.5)+
+    #stat_compare_means(y_position=c())+
+    theme_classic()+
+    geom_point()+
+    ggtitle(keyword)+
+    geom_signif(comparisons = combn(levels(kx$group),2, simplify = F),map_signif_level = T,step_increase = 0.2)
+}
+
+pval_corr_pair <- function(pval,corr,rcutoff,vargroup=NULL){
+  
+  corr <- melt(corr)
+  pval <- melt(pval)
+  
+  df <- cbind(corr,pval)
+  df <- df[,-c(4,5)]
+  df = df[which(df[,3]!=0),]
+  df = df[which(df[,4]<=0.05),]
+  df = df[which(abs(df[,3])>rcutoff),]
+  names(df)[2] <- 'index'
+  
+  if (!is.null(vargroup)) {
+    df <- merge(df,vargroup,by = 'index') 
+    df <- df[order(df[5]),]
+  }
+  return(df)
+}
+heatmap_corr<-function(corr,pval,prefix,width,height,anno=NULL,chosen_list=NULL,collist=NULL,rowlist=NULL,keyword=NULL,col_filt_na=TRUE,row_filt_na = TRUE){
+  library(ComplexHeatmap)
+  library(circlize)
+  library(reshape2)
+  library(tidyverse)
+  if (!is.null(keyword)) { 
+    s_corr <- corr[grep(keyword, names(corr), value=TRUE)] 
+    s_pval <- pval[grep(keyword, names(pval), value=TRUE)] 
+  }
+  else{
+    s_corr <- corr
+    s_pval <- pval
+  }
+  
+  if(!is.null(collist)) {
+    subset_col <- function(list,df){
+      filtered_df<- df[ ,which((names(df) %in% list)==TRUE)]
+      return(filtered_df)
+    }
+    s_pval <- subset_col(collist,s_pval)
+    s_corr <- subset_col(collist,s_corr)
+  }
+  if(!is.null(rowlist)) {
+    
+    subset_row <- function(list,df){
+      filtered_df <- df[which((row.names(df) %in% list)==TRUE),]
+      return(filtered_df)
+    }
+    s_pval <- subset_row(rowlist,s_pval)
+    s_corr <- subset_row(rowlist,s_corr)
+  }
+  #s_corr = cont_clean(s_corr,0)
+  #s_pval = cont_clean(s_pval,0)
+  print(dim(s_corr))
+  s_corr$id <- row.names(s_corr)
+  s_corr <- reshape2::melt(s_corr,id='id')
+  s_pval$id <- row.names(s_pval)
+  s_pval <- reshape2::melt(s_pval,id='id')
+  print(s_pval)
+  data <- cbind(s_corr,s_pval)
+  data <- data[,-c(4,5)]
+  names(data)[3] <- 'r'
+  names(data)[4] <- 'p'
+  datP <- data %>% mutate(p = cut(x = p, 
+                                  breaks = c(-Inf, 0.001, 0.01, 0.05, Inf),
+                                  labels = c("***", "**","*", ''))) %>% 
+    dplyr::select(id, variable, p) %>% 
+    spread(key = variable, value = p) %>% 
+    column_to_rownames(var = "id") %>% 
+    as.matrix() 
+  datP <- apply(datP, 2, function(x) gsub("^$|^ $", NA, x))
+  
+  datCor <- data %>% select(id:r) %>% 
+    spread(key = variable, value = r) %>% 
+    column_to_rownames(var = "id") %>%
+    as.matrix()
+  
+  
+  if (isTRUE(col_filt_na)){
+    datP <- datP %>% 
+      as.matrix() %>% 
+      .[,!apply(is.na(.), 2, all)]
+    datCor <- datCor[,(colnames(datCor)%in% colnames(datP))]
+  }
+  
+  
+  if (isTRUE(row_filt_na)){
+    datP <- datP %>% .[!apply(is.na(.), 1, all),]
+    datCor <- datCor %>% .[(rownames(.) %in% rownames(datP)),]
+  }
+  
+  
+  datP[is.na(datP)] <- " "
+  
+  TextFunc <- function(dat, col = "black", fontsize = 15, numdat = TRUE,digit = 2){
+    if(numdat == TRUE){
+      function(j, i, x, y, width, height, fill){
+        grid.text(round(dat, digit)[i, j], x, y, gp = gpar(fontsize = fontsize, col  = col))
+      }
+    }else{
+      function(j, i, x, y, width, height, fill){
+        grid.text(dat[i, j], x, y, gp = gpar(fontsize = fontsize, col  = col))
+      }
+    }}
+  
+  col_fun <- colorRamp2(breaks = c(-1, 0, 1), 
+                        colors = c("#2b8cbe", "white", "#e41a1c"))
+  
+  datCor.sorted  <- datCor[order(rownames(datCor)),]
+  if (!is.null(keyword)) { 
+    pdf(paste0(prefix,"_",keyword,'.pdf'), width=width, height=height)
+  }
+  else{
+    pdf(paste0(prefix,'.pdf'), width=width, height=height)
+  }
+  
+  textLeg <- Legend(labels = c("P < 0.05", "P < 0.01", "P < 0.001"), title = "P.value", type = "points", 
+                    pch = c("*", "**", "***"), legend_gp = gpar(col = "black"), background = "white")
+  
+  if (!is.null(anno)) { 
+    anno <- data.frame(anno[chosen_list])
+    names(anno)[1] <- 'group'
+    anno$group <- as.factor(anno$group)
+    
+    anno <- anno[match(rownames(datCor.sorted),rownames(anno)),]
+    
+    row_anno <- HeatmapAnnotation(group=anno,which='row') 
+    
+    p1 <- Heatmap(datCor, name = "R2", col = col_fun,
+                  rect_gp = gpar(col = "white", lwd = 1), 
+                  right_annotation = row_anno,
+                  cell_fun = TextFunc(datP, numdat = F))
+    draw(p1, merge_legend = TRUE, heatmap_legend_side = "right", 
+         annotation_legend_side = "right", annotation_legend_list = textLeg)
+  }
+  else{
+    p1 <- Heatmap(datCor, name = "R2", col = col_fun,
+                  rect_gp = gpar(col = "white", lwd = 1), 
+                  cell_fun = TextFunc(datP, numdat = F)
+    )
+    draw(p1, merge_legend = TRUE, heatmap_legend_side = "right",
+         annotation_legend_side = "right", annotation_legend_list = textLeg)
+  }
+  dev.off()
+  print(dim(datCor))
+}
+save_table <- function(x){
+  y = deparse(substitute(x))
+  outputname.txt<-paste0(y,".txt")
+  write.table(x, file= outputname.txt,quote = F,sep = '\t')
+  
+}
