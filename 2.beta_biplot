@@ -5,7 +5,6 @@ import argparse
 class DESCRIPTION:
     Program = "Program: %(prog)s ( Perfoming unsupervised ordination on an abundance distance matrix)"
     Version = "Version: 2022.05.06-18:00"
-    Contact = "Contact: Liao Yanwen, lyw@realmeta.cn"
     Description = "%s\n%s\n%s" % (Program, Version, Contact)
     
 #没有指定颜色分组时，mappingfile的所有分组都会画一遍
@@ -288,10 +287,3 @@ if __name__ == "__main__":
         
     os.system(f"export PATH=/work/install/miniconda/bin:$PATH && source activate R40 && Rscript {args.output}/beta_biplot.R")
 
-"""
-python /work/workspace/liaoyw/script/downstream/1.diversity/mat2biplot.py \
-    -i /work/workspace/liaoyw/project/2022.apr.nb/group/beta_mat/bray.dist.tsv \
-    -p /work/workspace/liaoyw/project/2022.apr.nb/group.tsv \ 
-    -o /work/workspace/liaoyw/project/TEST3 \
-    -m bray -e T -l locoszoom -f pdf
-"""
