@@ -1,40 +1,149 @@
+# -*- coding: UTF-8 -*-
+import os
+import argparse
 
-richness = rowSums(mtg_82 > 0)
-shannon = diversity(mtg_82, index = 'shannon', base = exp(1))
-alpha <- data.frame(shannon,richness) 
-#ct_g = data.frame(cat78_nd[119],cat78_nd[129])
-ct_g = sequela
-alpha = merge(ct_g,alpha,by=0)
-row.names(alpha) = alpha$Row.names
-alpha = alpha[,-1]
-names(alpha)[1] <- 'group'
-names(alpha)[2] <- 'Shannon'
-names(alpha)[2] <- 'Richness'
+parser = argparse.ArgumentParser()
+parser.add_argument("-i", help="--profile table  Input profile table of relative abundance,separated by \\t",required=True)
+parser.add_argument("-p", help="--mappingfile, separated by \\t",required=True)
+parser.add_argument("-c", help="--index number of the selected column, each var will be used if this argument is not given",default='NULL')
+parser.add_argument("-o", help="--path of outfile, e.g.:[project]/[group]/alpha_diversity", required=True)
+parser.add_argument("-w", help="--width, unit = mm, default 160", default=160, type=int)
+parser.add_argument("-g", help="--height, unit = mm, default 100",  default=100, type=int)
+parser.add_argument("-pairwise", help="--pairwise comparison",  default='F',choices=['T','F'],type=str)
+parser.add_argument("-l", help="--pallette",default = "npg",type=str)
+parser.add_argument("-f", help="--format of output images",default="png",choices=['png','pdf','tiff','svg','jpg'])
+args = parser.parse_args()
+    
+#没有指定颜色分组时，mappingfile的所有分组都会画一遍
+#默认输出png，指定其它格式时会输出png+指定格式两张图
 
-alpha$group = as.factor(alpha$group)
-alpha_m = melt(alpha)
-alpha_m 
+if os.path.exists(args.o) is False:
+  os.makedirs(args.o)
 
-alpha_cm =ggplot(alpha_m, aes(group,value))+
-  geom_boxplot(aes(fill=group),lwd = 1.2,width = 0.5)+
-  #scale_fill_manual(values = c("#f3a583","#94c6da", 'palegreen3','gold','gray','cadetblue3','darkgreen'))+
-  scale_fill_lancet()+
-  facet_wrap(variable~.,scales = 'free')+
-  theme(axis.text.x=element_blank())+
-  theme_bw()+
-  theme(panel.border = element_rect(size = 1),
-        axis.text.y = element_text(size=8),
-        axis.text.x = element_text(size = 9,hjust = 1),
-        axis.title = element_text(size=14),
-        legend.key.size = unit(10, "mm"),
-        legend.text = element_text(size=10),
-        legend.title = element_blank(),
-        legend.position = 'right',
-        strip.background = element_rect(fill='gray92',size = 1),
+def getRscript(profile,mapping,colno,output,wid,hgt,pw,pal,fmt):
+    script = """
 
-        strip.text = element_text(size = 10,face = 'bold'))+
-  labs(x='',y='')+
-  stat_compare_means()
-alpha_cm
+profiledir = "%s"
+groupdir = "%s"
+colno = %s
+if(is.null(colno)){
+  print('no column index specified')}
+prefix = "%s"
+wid = %d
+hgt = %d
+pw = as.logical(%s)
+pal= '%s'
+fmt = '%s'
 
-ggsave(alpha_cm, filename = 'alpha_cm_normal.tiff', device = 'tiff',width = 140,height = 100,units='mm',dpi=600)
+library(vegan)
+library(reshape2)
+library(ggsci)
+library(ggpubr)
+group <- read.table(groupdir,header = T,sep= '\t',quote="",row.names = 1,check.names=F)
+profile <- read.table(profiledir,header=T,sep='\t', quote="",row.names=1,check.names=F)
+profile <- t(profile)
+#chosen_list <- as.integer(column_no)  
+
+alpha_calc <- function(profile){
+    Richness <- rowSums(profile>0)
+    Shannon <- diversity(profile,index = 'shannon',base = exp(1))
+    Gini_Simpson <- vegan::diversity(profile,index = 'simpson')
+    alpha <- data.frame(Shannon,Richness,Gini_Simpson) 
+    a_file <- paste("alpha_indices","tsv",sep='.')
+    write.table(data.frame(ID=rownames(alpha),alpha),file=paste(prefix,a_file,sep='/'),quote=F,row.names=F,sep='\t')
+    return(alpha)
+  }
+
+alpha_res <- alpha_calc(profile)
+
+pal_s <- function(plot,pal){
+  if (pal=='npg'){
+    plot <- plot + scale_fill_npg()
+  } else if (pal=='aaas'){
+    plot <- plot + scale_fill_aaas()
+  } else if (pal=='lancet'){
+    plot <- plot + scale_fill_lancet()
+  } else if (pal =='cont'){
+    library(viridis)
+    plot <- plot + scale_fill_viridis()
+  } else {
+    plot <- plot + scale_fill_locuszoom()
+  }
+
+}
+
+alpha_boxplot <- function(mapping,alpha,chosen_list,pal){
+
+  g <- data.frame(mapping[chosen_list]) 
+  names(g)[1] <- 'group'
+
+  alpha = merge(g,alpha,by=0)  
+  row.names(alpha) = alpha$Row.names
+  names(alpha)[1] = 'id'
+  alpha$group = as.factor(alpha$group)
+  alpha_m = melt(alpha)
+  #alpha_m = alpha_m[order(alpha_m$group),]
+
+
+  alpha_m$group <- factor(as.character(alpha_m$group))
+  #alpha_m = alpha_m[order(alpha_m$group),]
+  print(levels(alpha_m$group))
+  alpha_cm =ggplot(alpha_m, aes(group,value))+
+    geom_boxplot(aes(fill=group),lwd = 1.2,width = 0.5)+
+    facet_wrap(variable~.,scales = 'free')+
+    theme(axis.text.x=element_blank())+
+    theme_bw()+
+    theme(panel.border = element_rect(size = 1),
+          axis.text.y = element_text(size=8),
+          axis.text.x = element_text(size = 9,hjust = 1,angle=60),
+          axis.title = element_text(size=14),
+          legend.key.size = unit(10, "mm"),
+          legend.text = element_text(size=10),
+          legend.title = element_blank(),
+          legend.position = 'right',
+          strip.background = element_rect(fill='gray92',size = 1),
+          strip.text = element_text(size = 10,face = 'bold'))+
+    labs(x='',y='')+
+    stat_compare_means(label="p.format")
+
+  alpha_cm = pal_s(alpha_cm,pal)
+
+  if (isTRUE(pw)){
+    alpha_cm<- alpha_cm+stat_compare_means(comparisons = combn(levels(alpha_m$group),2, simplify = F),label = "p.signif",hide.ns=T)
+  }
+
+  return (alpha_cm)
+}
+
+save_plot <- function(ggobj,mapping,chosen_list,format){
+  filename = paste(colnames(mapping)[chosen_list],"alpha_boxplot",format,sep='.')
+  output1 = paste(prefix, filename, sep='/')
+  print(output1)
+  ggsave(ggobj, filename = output1, device = format,width = wid,height = hgt,units='mm',dpi=600)
+}
+
+
+
+if(is.null(colno)){
+  for (i in 1:ncol(group)){
+    print(i)
+    p = alpha_boxplot(group,alpha_res,i,pal)
+    save_plot(p,group,i,'png')
+    if (!fmt=="png"){save_plot(p,group,i,fmt)}
+    }
+
+} else {
+  p = alpha_boxplot(group,alpha_res,colno,pal)
+  save_plot(p,group,colno,'png')
+  if (!fmt=="png"){save_plot(p,group,colno,fmt)}
+}
+
+
+""" % (profile,mapping,colno,output,wid,hgt,pw,pal,fmt)
+    return script
+
+
+Rscript = getRscript(args.i,args.p,args.c,args.o,args.w,args.g,args.pairwise,args.l,args.f)
+with open(args.o + "/alpha_calc.R", "w") as f:
+    f.write(Rscript)
+os.system("export PATH=/work/install/miniconda/bin:$PATH && source activate R40 && Rscript " + args.o + "/alpha_calc.R")
