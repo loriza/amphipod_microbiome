@@ -1,0 +1,297 @@
+# -*- coding: UTF-8 -*-
+import os
+from sys import argv
+import argparse
+class DESCRIPTION:
+    Program = "Program: %(prog)s ( Perfoming unsupervised ordination on an abundance distance matrix)"
+    Version = "Version: 2022.05.06-18:00"
+    Contact = "Contact: Liao Yanwen, lyw@realmeta.cn"
+    Description = "%s\n%s\n%s" % (Program, Version, Contact)
+    
+#没有指定颜色分组时，mappingfile的所有分组都会画一遍
+#默认输出png，指定其它格式时会输出png+指定格式两张图
+
+def getRscript(profile, mapping, axis1, axis2, prefix, pal, fmt, m, ell, col, sha):
+    print('hello')
+    script = """        
+distdir = '%s'
+groupdir = '%s'
+axis1 = %d
+axis2 = %d
+prefix = '%s'
+width = 130
+height = 120
+pal = '%s'
+fmt = '%s'
+method = '%s'
+ell = as.logical(%s)
+colg = %s
+shag =  %s
+
+library(ggplot2)
+library(ggsci)
+library(vegan)
+
+pal_s <- function(plot,pal){
+    if (pal=='npg'){
+      plot <- plot + scale_color_npg()
+    } else if (pal=='aaas'){
+      plot <- plot + scale_color_aaas()
+    } else if (pal=='lancet'){
+      plot <- plot + scale_color_lancet()
+    } else if (pal =='cont'){
+      library(viridis)
+      plot <- plot + scale_color_viridis_c()
+    } else {
+      plot <- plot + scale_color_locuszoom()
+    }
+    return(plot)
+}
+
+class_color <- function(plot_df){
+    if (!pal=='cont'){
+        plot_df$color <- as.factor(plot_df$color)
+    } else{
+        plot_df$color <- as.numeric(plot_df$color)
+    }
+    return(plot_df)
+}
+
+groupinfo <- function(metadata,colgroup,shapegroup=NULL){
+
+  metadata2 <- data.frame(metadata[colgroup])
+  names(metadata2)[1] <- "color"
+  if (!is.null(shapegroup)){
+    metadata2 <- data.frame(metadata2,metadata[shapegroup])
+    names(metadata2)[2] <- 'shape'}
+
+  return(metadata2)
+  }
+
+nmds_plotdata_extraction <- function(nmds_object,group) {
+    nmds_df = as.data.frame(nmds_object$points)
+    nmds_df$names <- rownames(nmds_df)
+
+    group$names<- rownames(group)
+    nmds_df <- merge(nmds_df, group, by="names")
+
+}
+
+nmds_plot  <- function(nmds_df, axis1, axis2, stress){
+  nmds_df = class_color(nmds_df)
+  kept_axes = paste0("MDS", c(axis1, axis2))
+
+  nmds <- ggplot(nmds_df,aes_string(x = kept_axes[1],y = kept_axes[2])) +
+      geom_hline(yintercept = 0, linetype = 2, color = "gray") +
+      geom_vline(xintercept = 0, linetype = 2, color = "gray") +
+      
+      labs(x = "nMDS1",
+      color = '',
+          y = "nMDS2"
+        )+
+      annotate("text", label = paste("Stress =",stress), x = 0.0, y = 0.3, size = 3, colour = "black")+
+      ggtitle("")+
+      theme_classic() +
+      theme(panel.grid = element_blank(),
+          legend.position = "right",
+          legend.title = element_text(size=12,face="bold"),
+          legend.text = element_text(size=12),
+          axis.title=element_text(size=12,face = "bold")
+      )
+
+  if ("shape" %%in%% colnames(nmds_df)) {
+    nmds  <- nmds + geom_point(aes(color=color,shape=shape),size=4,alpha=0.8)+labs(shape='')
+    }else{
+      nmds  <- nmds + geom_point(aes(color=color),size =4,alpha=0.8) 
+      }
+
+  nmds=pal_s(nmds,pal)
+  return(nmds)
+
+}
+
+pcoa_plotdata_extraction <- function(pcoa_object,metadata){
+  pcoa_df = as.data.frame(pcoa_object$points)
+  pcoa_df$names <- rownames(pcoa_df)
+  metadata$names <- rownames(metadata)
+  pcoa_df <- merge(pcoa_df, metadata,by ='names')
+  return(pcoa_df)
+}
+
+axes_lab_calc <- function(pcoa_object){
+    kept_axes = paste0("Axis.", c(axis1, axis2))
+    sum_eig = sum(pcoa_object$eig)
+    # Eigen values per axes
+    eigen_values = pcoa_object$eig[c(axis1, axis2)]/sum_eig
+    names(eigen_values) = kept_axes
+
+    # Axes labels in plot
+    axes_labs = lapply(kept_axes, function(x) {
+        paste0(gsub("Axis.", "", x, fixed = TRUE),
+            " (", round(eigen_values[x] * 100, 2), "%%)")
+    })
+    return(axes_labs)
+  }
+
+pcoa_plot<- function(pcoa_df,axis1,axis2,axes_labs){
+
+  pcoa_df = class_color(pcoa_df)
+  pcoa_p <- ggplot(pcoa_df,aes(x = V1,y = V2))+
+      labs(x = paste('PCoA',axes_labs[[1]]),
+          color = "",
+          y = paste('PCoA',axes_labs[[2]])
+      )+
+  theme_classic()
+
+  if ("shape" %%in%% colnames(pcoa_df)) {
+    pcoa_p  <- pcoa_p + geom_point(aes(color=color,shape=shape),size=4,alpha=0.8)+labs(shape='')
+    }else{
+      pcoa_p  <- pcoa_p + geom_point(aes(color=color),size =4,alpha=0.8) 
+      }
+  pcoa_p=pal_s(pcoa_p,pal)
+  return(pcoa_p)
+
+}
+
+
+
+add_ellipse <- function(ggobj){
+  ggobj_ellipse <- ggobj + stat_ellipse(aes(color=color),level = 0.95, alpha = 0.6,linetype=2,size =1.0,geom = "path", show.legend = FALSE)
+  return(ggobj_ellipse)
+}
+
+save_plot <- function(ggobj,color_g_name,ellipse=F,format,ordin){
+  if(isTRUE(ellipse)){
+    filename <-  paste(color_g_name,method,ordin,"ellipse",format,sep='.')
+    }else{
+      filename <-  paste(color_g_name,method,ordin,format,sep='.')
+      }
+  file_ab_path <- paste(prefix,filename,sep='/')
+  print(file_ab_path)
+  ggsave(ggobj, filename=file_ab_path,
+                device = format,
+                width = width,
+                height = height,
+                units="mm",dpi=600)
+}
+
+
+main <- function(pcoa_object,group,color_group_name,ellipse,format){
+  pcoa_plotdata <- pcoa_plotdata_extraction(pcoa_object,group)
+  axes_label <- axes_lab_calc(pcoa_object)
+  pcoa_plt <- pcoa_plot(pcoa_plotdata,axis1,axis2,axes_label)
+
+  save_plot(pcoa_plt,color_group_name,ellipse=F,'png','pcoa')
+  if(!format=='png'){save_plot(pcoa_plt,color_group_name,ellipse=F,format,'pcoa')}
+
+  if(isTRUE(ellipse)){
+    p = add_ellipse(pcoa_plt)
+    save_plot(p,color_group_name,ellipse,'png','pcoa')
+    if(!format=='png'){save_plot(p,color_group_name,ellipse,format,'pcoa')}
+  }
+
+}
+
+main2 <- function(nmds_object,group,color_group_name,ellipse,format){
+  n_plotdata <- nmds_plotdata_extraction(nmds_object,group)
+  stress0 = round(nmds_object$stress,4)
+
+  n_plot <- nmds_plot(n_plotdata, axis1, axis2, stress0)
+
+  save_plot(n_plot,color_group_name,ellipse=F,'png','nmds')
+  if(!format=='png'){save_plot(n_plot,color_group_name,ellipse=F,format,'nmds')}
+
+  if(isTRUE(ellipse)){
+    n = add_ellipse(n_plot)
+    save_plot(n,color_group_name,ellipse,'png','nmds')
+    if(!format=='png'){save_plot(n,color_group_name,ellipse,format,'nmds')}
+  }
+}
+
+grp = read.table(groupdir,header = T,sep='\t',row.names = 1,check.names=F)
+distm = read.table(distdir,header=T,sep="\t", row.names=1,check.names=F)
+
+to_save <- as.list(row.names(grp))
+distm <- distm[which((row.names(distm) %%in%% to_save)==TRUE),which((names(distm) %%in%% to_save)==TRUE)]
+
+pcoa_obj <- cmdscale(distm,eig = T)
+nmds_obj = vegan::metaMDS(distm)
+
+if (!is.null(colg))
+{
+  color_group_index = names(grp)[colg]
+  grp_sub = groupinfo(grp,colg,shag)
+  main(pcoa_obj,grp_sub,color_group_index,ell,fmt)
+  main2(nmds_obj,grp_sub,color_group_index,ell,fmt)
+  }else{
+    for(i in 1:ncol(grp)){
+      color_group_index = names(grp)[i]
+      grp_sub = groupinfo(grp,i,shag)
+      main(pcoa_obj,grp_sub,color_group_index,ell,fmt)
+      main2(nmds_obj,grp_sub,color_group_index,ell,fmt)
+      }
+    }
+
+
+
+
+""" % (profile, mapping, axis1, axis2, prefix, pal, fmt, m, ell, col, sha)
+    return script
+
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-i", dest='dist',
+                        help="--Input distance matrix", required=True)
+    parser.add_argument("-p", dest='mapping',
+                        help="--Input mappingfile ,separate with \\t", 
+                        required=True)
+    parser.add_argument("-a", 
+                        help="--axis1", default=1, type=int)
+    parser.add_argument("-s", 
+                        help="--axis2", default=2, type=int)
+    parser.add_argument("-o",dest='output',
+                        help="--directory and prefix of outfile")
+    parser.add_argument("-l", dest='pallette',
+                        help="--pallette",
+                        default="locoszoom", type=str)
+    parser.add_argument("-f", dest='format',
+                        help="--format of output images",
+                        choices=["tiff","png","pdf","svg"],
+                        default="png")
+    parser.add_argument("-m", dest='method',
+                        help="--Dissimilarity index, e.g:[bray/jaccard/wu/uwu], default bray-curtis",
+                        choices = ['bray','jaccard','wu','uwu'],
+                        default="bray",
+                        type=str)
+    parser.add_argument("-e", help="--adding ellipse or not,",
+                        choices=["T","F"],
+                        default="F",
+                        type=str)
+    parser.add_argument("-color", help="the variable represented by color, all varibales will be used if this argument is not specified",
+                        default='NULL',
+                        )
+    parser.add_argument("-shape",
+                        help="the varibale represented by shape",
+                        default='NULL')
+
+    args = parser.parse_args()
+
+    if os.path.exists(args.output) is False:
+        os.makedirs(args.output)
+
+    Rscript = getRscript(args.dist, args.mapping, args.a, args.s, args.output, 
+                        args.pallette, args.format, args.method, args.e, args.color, args.shape)
+    with open(f"{args.output}/beta_biplot.R", "w") as f:
+        f.write(Rscript)
+        
+    os.system(f"export PATH=/work/install/miniconda/bin:$PATH && source activate R40 && Rscript {args.output}/beta_biplot.R")
+
+"""
+python /work/workspace/liaoyw/script/downstream/1.diversity/mat2biplot.py \
+    -i /work/workspace/liaoyw/project/2022.apr.nb/group/beta_mat/bray.dist.tsv \
+    -p /work/workspace/liaoyw/project/2022.apr.nb/group.tsv \ 
+    -o /work/workspace/liaoyw/project/TEST3 \
+    -m bray -e T -l locoszoom -f pdf
+"""
