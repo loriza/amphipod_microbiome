@@ -1,0 +1,122 @@
+#!/usr/bin/env Rscript
+
+args <- commandArgs(trailingOnly = TRUE)
+
+prof_infile <- args[1]
+group_file <- args[2]
+outpath <- args[3]
+
+lgd_title <- args[4]
+fmt <- args[5]
+chosen_list_no <- as.numeric(args[6])
+
+dir.create(outpath,showWarnings=F)
+
+profile <- read.delim(file=prof_infile, header=T, sep='\t',quote="",row.names=1,check.names=F)
+
+group <- read.table(file=group_file,sep='\t',header=T,check.names=F,row.names=1)
+prefix <- names(group)[chosen_list_no]
+group <- data.frame(group)
+
+
+library(reshape2)
+library(ggplot2)
+library(RColorBrewer)  
+library(ggpubr)
+library(ggsci)
+library(forcats)
+
+
+#profile: 
+p2plotdata <- function(profile,group) {
+
+    profile <- profile[,names(profile) %in% rownames(group)]
+    print(dim(profile))
+    nsamp <- ncol(profile)
+    profile$sum <- rowSums(profile)
+    profile <- profile[order(profile$sum, decreasing = TRUE), ]
+ 
+
+    profile <- subset(profile,sum>nsamp)
+    
+    profile_topn = profile
+    
+    profile_topn['< 1%', ] <- 100 - colSums(profile_topn)
+    profile_topn$taxa <- factor(rownames(profile_topn), levels = rev(rownames(profile_topn)))
+
+    profile_topn <- melt(profile_topn,id='taxa')
+    #print(profile_topn)
+ 
+
+    group$variable <- row.names(group)
+    profile_topn <- merge(profile_topn, group, by = 'variable')
+    
+
+    ###########################################################################barplot
+    
+    names(profile_topn)[ncol(profile_topn)] <- 'group'
+
+    return(profile_topn)
+}  
+
+
+
+
+boxplot <- function(profile_top,outputdir){
+    profile_top <- profile_top[!(profile_top$taxa=='< 1%'),] 
+    names(profile_top)[4] <- 'group'
+    names(profile_top)[5] <- 'pair'
+    print(profile_top)
+    p <- ggplot(profile_top, aes(x=group, y=value))+
+        geom_line(aes(group,value,group=pair))+
+        geom_boxplot(aes(fill=group),width=0.4,position=position_dodge(0.0))+
+        scale_fill_locuszoom()+
+        #scale_fill_brewer(palette = 'Set3')+
+        facet_wrap(~taxa,ncol=4,strip.position="top",scales='free')+
+        #facet_grid(taxa~. , scales="free",cols = 4)+
+        theme_classic()+
+        theme(
+            axis.text.x = element_blank(),
+            #axis.text.x = element_text(size=6,angle = 45,hjust=1),
+            axis.text = element_text(size = 5),
+            axis.ticks.x = element_blank(),
+            axis.title = element_text(size = 7),
+            strip.text = element_text(size=7),
+            strip.background = element_blank(),
+            strip.placement = "outside",
+            panel.background = element_rect(fill = 'transparent'),
+            legend.position = 'right',
+            panel.spacing=unit(0, "lines")     
+            )+
+        stat_compare_means(label='p.format',size = 2)+
+        
+        theme(panel.grid.minor.y = element_blank())+
+        #stat_compare_means(label = "p.signif")+
+        #stat_compare_means(comparisons = combn(levels(profile_top$group),2, simplify = F),label = "p.signif",hide.ns=F)
+        labs(x = '', y = 'Relative Abundance(%)',face='bold')
+
+    fn = paste(lgd_title,"box","pdf",sep='.')
+    fn2 = paste(lgd_title,"box","png",sep='.')
+
+    height = ceiling(length(unique(profile_top$taxa))/4) * 70
+ 
+
+    ggsave(p,
+            file=paste(outputdir,fn,sep="/"),
+            width=160,
+            device='pdf',
+            height=height,
+            units='mm',
+            dpi=600)
+    ggsave(p,
+            file=paste(outputdir,fn2,sep="/"),
+            width=160,
+            device='png',
+            height=height,
+            units='mm',
+            dpi=600)
+}
+
+
+df <- p2plotdata(profile,group)
+boxplot(df,outpath)
