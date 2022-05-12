@@ -1,0 +1,306 @@
+# -*- coding: UTF-8 -*-
+import os
+from sys import argv
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("-i", help="-i --profile table, sampleID as column names, separate with \\t, required",required=True)
+parser.add_argument("-p", help="-p --mapping file, absolute path of mappingfile, separate with \\t, required",required=True)
+parser.add_argument("-o", help="-o --absolute path of outfile, e.g.:[project]/[group]/wilcox ",type=str)
+parser.add_argument("-c", help="-c --column, default 1st column", default=1,type=int)
+parser.add_argument("-f", help="-f --format of output image", default="pdf")
+parser.add_argument("-s", help="-s --[pvalue/qvalue]",default="pvalue")
+parser.add_argument("-q", help="-q --significance cutoff, default=0.01",default=0.01,type=float)
+parser.add_argument("-u", help="-u --fold change cutoff, default=2",default=2,type=int)
+parser.add_argument("-b", help="-b --base of logarithm for the logFC, [2/10/NULL], default=2",default=2)
+
+args = parser.parse_args()
+
+if os.path.exists(args.o)==False:
+  os.makedirs(args.o)
+
+def getRscript(table, mapping, outfile, cname,prob,fmt,qcut,fccut,log):
+    script = """
+file1 = "%s"
+mapping = "%s"
+outdir = "%s"
+chosen_list = %d
+prob = "%s"
+fmt = "%s"
+qcutoff = %f
+fccutoff = %d
+log = %s
+
+
+library(ggplot2)
+library(ggrepel)
+library(coin)
+library(fdrtool)
+data = read.table(file1,row.names=1,check.names=F,header=T,quote = "",sep="\t")#id as column names
+mapping = read.delim(mapping,row.names=1,header=T,check.names=F,quote = "",sep="\t")
+
+profile <- t(data)
+col_tar <- names(mapping)[chosen_list]
+names(mapping)[chosen_list] <- 'target'  
+mapping$id <- row.names(mapping)
+
+if (length(colnames(mapping))>2){
+  to_save <- row.names(profile)
+  mapping <- mapping[which(row.names(mapping) %%in%% to_save == T),]
+  mapping <- na.omit(mapping)
+  
+} else{
+  mapping <- mapping[!is.na(mapping$target), ]
+}
+
+
+calc_wilcoxon <- function(prof,g,g1,g2,k,colname){
+
+    respath = paste(outdir,colname,sep='/')
+    dir.create(respath, showWarnings = F)
+    
+    outfile = paste(k,"test_out",sep=".")
+    outfile = paste(respath,outfile,sep='/')
+   
+    dat <- merge(prof,g,by=0)
+
+    rownames(dat) <- dat$Row.names
+    dat <- dat[,-1]
+    dat <- dat[,1:ncol(prof)]
+    dat <- dat[,colSums(dat)>0]
+    num <- ncol(dat) 
+    res <- matrix(0,nrow=num,ncol=13)
+    
+    g$ids <- rownames(g)
+    dat <- as.data.frame(t(dat))#as such feature as rows and id as columns
+
+    rownames(res) <- rownames(dat)
+    g$target <- factor(g$target)
+ 
+    g <- g[,(colnames(g)%%in%%c("ids","target"))]
+    g<- g[order(g$ids),]
+
+    dat <- dat[,colnames(dat) %%in%% rownames(g)]
+    dat <- dat[,order(colnames(dat))]
+
+    for (j in 1:num){ 
+        s = as.numeric(dat[j,])    
+        mydata = data.frame(g,s)  
+        mydata = mydata[order(mydata[,1], mydata[, 2]),]    
+        r = rank(s,ties.method = "average")    
+       
+        res[j,1] = mean(s[g==g1])
+        res[j,2] = mean(s[g==g2])
+        res[j,3] = mean(r[g==g1])
+        res[j,4] = mean(r[g==g2])
+
+        if (!res[j,1] == res[j,2]){
+          test1 = t.test(s~target,data=mydata) #t-test
+          res[j,5] = test1$p.value
+          wilcox1 = wilcox.test(s~target,data=mydata) #wilcoxon rank sum test 
+          res[j,9] = wilcox1$p.value
+          perm = oneway_test(s~target,data=mydata,distribution=approximate(nresample = 9999)) #Test whether two or more samples from normal distributions have the same means.
+          res[j,13] = pvalue(perm)
+        }   
+    }
+    
+    res <- na.omit(res)
+    pa1 <- p.adjust(res[,5],method="fdr") #t-test qvalue
+    res[,6] <- pa1
+
+    fdr1 <- fdrtool(res[,5],statistic="pvalue")
+    res[,7] <- fdr1$qval
+    res[,8] <- fdr1$lfdr
+    
+    pa2 <- p.adjust(res[,9],method="fdr")
+    res[,10] <- pa2
+    fdr2 <- fdrtool(res[,9],statistic="pvalue")
+    res[,11] <- fdr2$qval
+    res[,12] <- fdr2$lfdr
+
+    colnames <- c(paste(g1,"mean",sep="_"),
+                paste(g2,"mean",sep="_"),
+                paste(g1,"Rank_mean",sep="_"),
+                paste(g2,"Rank_mean",sep="_"),
+                "t_pvalue",
+                "t_adjust",
+                "t_qvalue",
+                "t_fdr",
+                "wilcox_pvalue",
+                "wilcox_adjust",
+                "wilcox_qvalue",
+                "wilcox_fdr",
+                "perm_value")
+    res <- as.data.frame(res)
+    names(res) <- colnames
+    write.table(data.frame(ID=rownames(res),res,check.names = F),
+                outfile,
+                sep="	",
+                quote=F,
+                row.names=F) 
+
+    return(res)
+}
+
+volcano_plot <- function(res,k,g1,g2,prob,colname,lgc=NULL){
+
+  respath = paste(outdir,colname,sep='/')
+  outfile = paste(k,prob,sep=".")
+  outfile = paste(respath,outfile,sep='/')
+
+  if (prob == 'pvalue'){
+    plt <- res[,c(1,2,9)]
+  }else if (prob =='qvalue'){
+    plt <- res[,c(1,2,11)]
+  }
+
+  plt$rfc <- plt[,1]/plt[,2] #g1/g2
+
+  if (!is.null(lgc)){
+    plt$logfc <- log2(plt$rfc)
+    plt <- plt[,-which(names(plt)=="rfc")]
+    colnames(plt)[which(names(plt) == "logfc")] <- "fc"
+    }else{
+      colnames(plt)[which(names(plt) == "rfc")] <- "fc"
+    }
+  is.na(plt)<-sapply(plt, is.infinite)
+  plt[is.na(plt)]<-0
+  #plt$fc[which(plt$fc < 1)] <- -1/plt$fc[which(plt$fc < 1)]
+  plt$fc[which(plt$fc > 10)] <- 10
+  plt$fc[which(plt$fc < -10)] <- -10
+  plt[,3] <- -log10(plt[,3]) #log10(pvalue)
+  names(plt)[3] <- 'q_p'
+ 
+
+  
+  plt[,5:6] <- NA #col4 group,col5 label
+
+  names(plt)[c(5,6)] <- c('Group','text')
+
+  plt$Group[union(which(abs(plt$fc)< fccutoff),which(plt[,3]< -log10(as.numeric(qcutoff))))]<-'NS'
+  plt$Group[intersect(which(plt$fc <= -fccutoff),which(plt[,3]>= -log10(as.numeric(qcutoff))))]<- g2
+  plt$Group[intersect(which(plt$fc >= fccutoff),which(plt[,3]>= -log10(as.numeric(qcutoff))))]<- g1
+  print(g1 %%in%%plt$Group)
+  print(g2 %%in%%plt$Group)
+  plt$text[plt$Group==g1 & !is.na(plt$Group)]<-row.names(plt)[plt$Group==g1]
+  plt$text[plt$Group==g2 & !is.na(plt$Group)]<-row.names(plt)[plt$Group==g2]
+
+
+  species<-function(ii){
+    ii<-as.character(ii)
+    ii[intersect(grep('.*[|,.;]g__.*[|,.;]s__..*',ii),grep('[|,.;]s__$',ii,invert=T))]<-as.character(lapply(ii[
+    intersect(grep('.*[|,.;]g__.*[|,.;]s__..*',ii),grep('[|,.;]s__$',ii,invert=T))],function(x){gsub('.*[|,.;]s','s',x)}))
+    ii[intersect(grep('.*[|,.;]f__.*[|,.;]g__..*',ii),grep('g__[|,.;]s__',ii,invert=T))]<-as.character(lapply(ii[
+    intersect(grep('.*[|,.;]f__.*[|,.;]g__..*',ii),grep('g__[|,.;]s__',ii,invert=T))],function(x){gsub('.*[|,.;]g','g',x)}))
+    ii[intersect(grep('.*[|,.;]o__.*[|,.;]f__..*',ii),grep('f__[|,.;]g__',ii,invert=T))]<-as.character(lapply(ii[
+    intersect(grep('.*[|,.;]o__.*[|,.;]f__..*',ii),grep('f__[|,.;]g__',ii,invert=T))],function(x){gsub('.*[|,.;]f','f',x)}))
+    ii[intersect(grep('.*[|,.;]c__.*[|,.;]o__..*',ii),grep('o__[|,.;]f__',ii,invert=T))]<-as.character(lapply(ii[
+    intersect(grep('.*[|,.;]c__.*[|,.;]o__..*',ii),grep('o__[|,.;]f__',ii,invert=T))],function(x){gsub('.*[|,.;]o','o',x)}))
+    ii[intersect(grep('.*[|,.;]p__.*[|,.;]c__..*',ii),grep('p__[|,.;]c__',ii,invert=T))]<-as.character(lapply(ii[
+    intersect(grep('.*[|,.;]p__.*[|,.;]c__..*',ii),grep('p__[|,.;]c__',ii,invert=T))],function(x){gsub('.*[|,.;]c','c',x)}))
+    ii[intersect(grep('k__.*[|,.;]p__..*',ii),grep('k__[|,.;]p__',ii,invert=T))]<-as.character(lapply(ii[
+    intersect(grep('k__.*[|,.;]p__..*',ii),grep('k__[|,.;]p__',ii,invert=T))],function(x){gsub('.*[|,.;]p','p',x)}))
+    return(ii)
+  }
+  plt$text <- species(plt$text)
+
+  if(length(is.na(plt$text)==TRUE)==nrow(plt)){
+      plt$text[1]<- ' '}
+
+  plt$Group<-factor(plt$Group,levels = c(g1,g2,'NS'))
+
+  mycolor<-c('red','steelblue','grey')  
+  if (setequal(unique(plt$Group),c(g1,'NS'))){
+    mycolor<-c('red','grey')
+  }
+  if (setequal(unique(plt$Group),c(g2,'NS'))){
+    mycolor<-c('steelblue','grey')
+  }
+  if (setequal(unique(plt$Group),c('NS'))){
+    mycolor<-c('grey')
+  }
+
+  write.table(plt,
+              paste(outfile,'plot',sep='.'),
+              sep="	",
+              quote=F,
+              row.names=T) 
+  pp <- ggplot(plt,aes(x=fc,y=q_p,color=Group))+
+    geom_point(aes(alpha=0.3))+#no alpha legend
+    geom_text_repel(aes(label=text),size=2,min.segment.length = unit(0.4, "lines"))+
+  
+    geom_vline(xintercept=c(as.numeric(fccutoff),-as.numeric(fccutoff)),linetype="dashed")+
+    geom_hline(yintercept=-log10(as.numeric(qcutoff)),linetype="dashed")+
+    theme_bw()+
+    theme(
+        panel.grid =element_blank(),
+        panel.border = element_blank(),
+        axis.line = element_line(
+        size=1,
+        colour = "black"),
+        text=element_text(
+        family="Helvetica",
+        face="bold",
+        colour="black",
+        size=12
+        ))+
+    scale_color_manual(values = mycolor)+
+    guides(label=F)+
+    scale_alpha(guide = "none")+
+    labs(alpha='')+
+    xlim(-10,10)+
+    ylab('-log10(P-value)')+
+    xlab(paste('log',lgc,"(",g1,"/",g2,")"))
+  if (prob == "qvalue"){
+    pp <- pp+ylab('-log10(q-value)')
+  }
+  if (is.null(lgc)){
+    pp <- pp+xlab(paste("Fold change(",g1,"/",g2,")"))
+  }
+    
+  poutput1 <- paste(outfile,"png",sep='.')
+  poutput2 <- paste(outfile,"pdf",sep='.')
+  ggsave(pp, filename = poutput1, device = 'png',width = 150,height = 150,units='mm')
+  ggsave(pp, filename = poutput2, device = 'pdf',width = 150,height = 150,units='mm')
+}
+
+if(length(unique(mapping$target))>2){
+  groups <- as.list(unique(mapping$target))
+  combs <- t(combn(groups,2)) 
+  sublist <- list()
+  for (h in 1:nrow(combs)){
+    subgroup1 <- combs[h,][1]
+    subgroup2 <- combs[h,][2]
+    sub <- mapping[mapping$target==subgroup1 | mapping$target==subgroup2,]  
+    sublist[[h]] <- sub  
+  } 
+
+  for (i in sublist){
+   
+    group1 <- unique(i$target)[1]
+    group2 <- unique(i$target)[2]
+    k <- paste(group1,group2,sep='_')
+    print(i$target)
+    result <- calc_wilcoxon(profile,i,group1,group2,k,col_tar) 
+    volcano_plot(result,k,group1,group2,"pvalue",col_tar,log)
+    volcano_plot(result,k,group1,group2,"qvalue",col_tar,log)
+  }
+
+}else{
+  group1 <- unique(mapping$target)[1]
+  group2 <- unique(mapping$target)[2]
+  k <- paste(group1,group2,sep='_')
+  print(unique(mapping$target))
+  result <- calc_wilcoxon(profile,mapping,group1,group2,k,col_tar)
+  volcano_plot(result,k,group1,group2,"pvalue",col_tar,log)
+  volcano_plot(result,k,group1,group2,"qvalue",col_tar,log)
+}
+""" % (table, mapping, outfile, cname, prob, fmt, qcut, fccut,log)
+    return script
+
+
+Rscript = getRscript(args.i, args.p, args.o, args.c,args.s,args.f,args.q,args.u,args.b)
+with open(args.o + ".R", "w") as f:
+    f.write(Rscript)
+os.system("Rscript " + args.o + ".R")
+
