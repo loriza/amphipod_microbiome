@@ -1,14 +1,12 @@
-#!/usr/bin/env Rscript
+
 
 args <- commandArgs(trailingOnly = TRUE)
 
 prof_infile <- args[1]
 group_file <- args[2]
 outpath <- args[3]
-
 lgd_title <- args[4]
-fmt <- args[5]
-chosen_list_no <- as.numeric(args[6])
+chosen_list_no <- as.numeric(args[5])
 
 dir.create(outpath,showWarnings=F)
 
@@ -16,7 +14,7 @@ profile <- read.delim(file=prof_infile, header=T, sep='\t',quote="",row.names=1,
 
 group <- read.table(file=group_file,sep='\t',header=T,check.names=F,row.names=1)
 prefix <- names(group)[chosen_list_no]
-group <- data.frame(group)
+group <- data.frame(group[chosen_list_no])
 
 
 library(reshape2)
@@ -50,25 +48,110 @@ p2plotdata <- function(profile,group) {
 
     group$variable <- row.names(group)
     profile_topn <- merge(profile_topn, group, by = 'variable')
-    
+
 
     ###########################################################################barplot
     
     names(profile_topn)[ncol(profile_topn)] <- 'group'
-
     return(profile_topn)
 }  
 
+barplot<- function(profile_topn,outputdir){
+    
+
+    colourCount <- length(unique(profile_topn$taxa))
+   
+    profile_topn$name = profile_topn$variable
+    p <- ggplot(profile_topn, aes(fct_reorder2(variable,taxa,value), value))+
+        geom_col(position = 'stack') +
+        geom_bar(stat="identity", aes(fill=taxa)) +
+        scale_x_discrete(expand=c(0,0)) +
+        scale_y_continuous(expand = c(0.00,0.00)) +   
+        labs(x = '', y = 'Relative Abundance(%)') +     
+       
+        scale_fill_brewer(palette = 'Spectral')+
+        
+        #scale_fill_manual(values = colorRampPalette(brewer.pal(12, "Accent"))(colourCount)) +   
+        facet_grid(~group,scales = "free", space = "free_x", switch = "x")+
+        theme_classic() +
+        theme(    
+        axis.title=element_text(
+                                family="Helvetica",
+                                face="bold",
+                                colour="black",
+                                size=16
+                                ),
+        axis.text=element_text(
+                                family="Helvetica",
+                                colour="black",
+                                size=12
+                                ),
+        axis.text.x=element_blank(),
+        axis.ticks.x = element_blank(),
+        strip.text=element_text(
+                                family="Helvetica",
+                                colour="black",
+                                #angle=90,
+                                hjust=0.5,
+                                vjust=0.5,
+                                size=14
+                                )
+        )
+
+    if (length(unique(profile_topn$taxa))>11){
+        p=p+scale_fill_manual(values = colorRampPalette(brewer.pal(12, "Accent"))(colourCount))+
+            guides(fill = guide_legend(lgd_title, ncol=3)) +
+            theme(
+            legend.position='bottom',
+            legend.title=element_text(
+                                        family="Helvetica",
+                                        colour="black",
+                                        size=16
+                                        ),
+            legend.text=element_text(
+                            family="Helvetica",
+                            colour="black",
+                            size=14
+                            ))
+
+
+    }else{p = p+guides(fill = guide_legend(lgd_title, ncol=1)) +
+            theme(
+            legend.position='right',
+            legend.title=element_text(
+                                        family="Helvetica",
+                                        colour="black",
+                                        size=16
+                                        ),
+            legend.text=element_text(
+                            family="Helvetica",
+                            colour="black",
+                            size=14
+                            ))
+    }
+    fn = paste(lgd_title,"bar","pdf",sep='.')
+    fn2 = paste(lgd_title,"bar","png",sep='.')
+    ggsave(p,
+            file=paste(outputdir,fn,sep="/"),
+            width=360,
+            height=160,
+            units='mm',
+            dpi=600
+            )
+    ggsave(p,
+            file=paste(outputdir,fn2,sep="/"),
+            width=360,
+            height=160,
+            units='mm',
+            dpi=600
+            )
+}
 
 
 
 boxplot <- function(profile_top,outputdir){
     profile_top <- profile_top[!(profile_top$taxa=='< 1%'),] 
-    names(profile_top)[4] <- 'group'
-    names(profile_top)[5] <- 'pair'
-    print(profile_top)
     p <- ggplot(profile_top, aes(x=group, y=value))+
-        geom_line(aes(group,value,group=pair))+
         geom_boxplot(aes(fill=group),width=0.4,position=position_dodge(0.0))+
         scale_fill_locuszoom()+
         #scale_fill_brewer(palette = 'Set3')+
@@ -119,4 +202,6 @@ boxplot <- function(profile_top,outputdir){
 
 
 df <- p2plotdata(profile,group)
+
+barplot(df,outpath)
 boxplot(df,outpath)
