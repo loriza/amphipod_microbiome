@@ -6,9 +6,7 @@ class DESCRIPTION:
     Program = "Program: %(prog)s ( Perfoming unsupervised ordination on an abundance distance matrix)"
     Version = "Version: 2022.05.06-18:00"
     Description = "%s\n%s\n%s" % (Program, Version, Contact)
-    
-#没有指定颜色分组时，mappingfile的所有分组都会画一遍
-#默认输出png，指定其它格式时会输出png+指定格式两张图
+
 
 def getRscript(profile, mapping, axis1, axis2, prefix, pal, fmt, m, ell, col, sha):
     print('hello')
